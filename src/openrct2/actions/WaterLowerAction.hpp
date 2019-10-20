@@ -63,8 +63,8 @@ private:
 
         res->Position.x = ((validRange.GetLeft() + validRange.GetRight()) / 2) + 16;
         res->Position.y = ((validRange.GetTop() + validRange.GetBottom()) / 2) + 16;
-        int16_t z = tile_element_height(res->Position.x, res->Position.y);
-        int16_t waterHeight = tile_element_water_height(res->Position.x, res->Position.y);
+        int16_t z = tile_element_height(res->Position);
+        int16_t waterHeight = tile_element_water_height(res->Position);
         if (waterHeight != 0)
         {
             z = waterHeight;
@@ -72,17 +72,16 @@ private:
         res->Position.z = z;
         res->ExpenditureType = RCT_EXPENDITURE_TYPE_LANDSCAPING;
 
-        uint8_t minHeight = GetLowestHeight();
+        uint8_t minHeight = GetLowestHeight(validRange);
         bool hasChanged = false;
         for (int32_t y = validRange.GetTop(); y <= validRange.GetBottom(); y += 32)
         {
             for (int32_t x = validRange.GetLeft(); x <= validRange.GetRight(); x += 32)
             {
-                TileElement* tileElement = map_get_surface_element_at(x / 32, y / 32);
-                if (tileElement == nullptr)
+                auto* surfaceElement = map_get_surface_element_at(x / 32, y / 32);
+                if (surfaceElement == nullptr)
                     continue;
 
-                SurfaceElement* surfaceElement = tileElement->AsSurface();
                 uint8_t height = surfaceElement->GetWaterHeight();
                 if (height == 0)
                     continue;
@@ -111,7 +110,7 @@ private:
 
         if (isExecuting && hasChanged)
         {
-            audio_play_sound_at_location(SoundId::LayingOutWater, res->Position.x, res->Position.y, res->Position.z);
+            audio_play_sound_at_location(SoundId::LayingOutWater, res->Position);
         }
         // Force ride construction to recheck area
         _currentTrackSelectionFlags |= TRACK_SELECTION_FLAG_RECHECK;
@@ -120,18 +119,19 @@ private:
     }
 
 private:
-    uint8_t GetLowestHeight() const
+    uint8_t GetLowestHeight(MapRange validRange) const
     {
+        // The lowest height to lower the water to is the highest water level in the selection
         uint8_t minHeight{ 0 };
-        for (int32_t y = _range.GetTop(); y <= _range.GetBottom(); y += 32)
+        for (int32_t y = validRange.GetTop(); y <= validRange.GetBottom(); y += 32)
         {
-            for (int32_t x = _range.GetLeft(); x <= _range.GetRight(); x += 32)
+            for (int32_t x = validRange.GetLeft(); x <= validRange.GetRight(); x += 32)
             {
-                TileElement* tile_element = map_get_surface_element_at({ x, y });
-                if (tile_element == nullptr)
+                auto* surfaceElement = map_get_surface_element_at({ x, y });
+                if (surfaceElement == nullptr)
                     continue;
 
-                uint8_t height = tile_element->AsSurface()->GetWaterHeight();
+                uint8_t height = surfaceElement->GetWaterHeight();
                 if (height == 0)
                     continue;
 

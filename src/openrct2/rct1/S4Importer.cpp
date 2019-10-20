@@ -204,8 +204,6 @@ public:
         SetDefaultNames();
         determine_ride_entrance_and_exit_locations();
 
-        // Importing the strings is done later on, although that approach needs looking at.
-        // game_convert_strings_to_utf8();
         game_convert_news_items_to_utf8();
         map_count_remaining_land_rights();
     }
@@ -782,8 +780,7 @@ private:
         // Ride name
         if (is_user_string_id(src->name))
         {
-            auto rideName = GetUserString(src->name);
-            dst->custom_name = rct2_to_utf8(rideName, RCT2_LANGUAGE_ID_ENGLISH_UK);
+            dst->custom_name = GetUserString(src->name);
         }
 
         dst->status = src->status;
@@ -2015,7 +2012,7 @@ private:
 
     void ImportTileElement(TileElement* dst, const RCT12TileElement* src)
     {
-        // Todo: allow for changing defition of OpenRCT2 tile element types - replace with a map
+        // Todo: allow for changing definition of OpenRCT2 tile element types - replace with a map
         uint8_t tileElementType = src->GetType();
         dst->ClearAs(tileElementType);
         dst->SetDirection(src->GetDirection());
@@ -2121,18 +2118,29 @@ private:
                 dst2->SetSequenceIndex(src2->GetSequenceIndex());
                 dst2->SetRideIndex(src2->GetRideIndex());
                 dst2->SetColourScheme(src2->GetColourScheme());
-                dst2->SetStationIndex(src2->GetStationIndex());
                 dst2->SetHasChain(src2->HasChain());
                 dst2->SetHasCableLift(false);
                 dst2->SetInverted(src2->IsInverted());
-                dst2->SetBrakeBoosterSpeed(src2->GetBrakeBoosterSpeed());
+                dst2->SetDoorAState(src2->GetDoorAState());
+                dst2->SetDoorBState(src2->GetDoorBState());
+                dst2->SetStationIndex(src2->GetStationIndex());
                 dst2->SetHasGreenLight(src2->HasGreenLight());
-                dst2->SetSeatRotation(4);
-                dst2->SetMazeEntry(src2->GetMazeEntry());
-                dst2->SetPhotoTimeout(src2->GetPhotoTimeout());
-                // Skipping IsHighlighted()
 
-                // TODO: Import Door A and Door B states.
+                auto trackType = dst2->GetTrackType();
+                if (track_element_has_speed_setting(trackType))
+                {
+                    dst2->SetBrakeBoosterSpeed(src2->GetBrakeBoosterSpeed());
+                }
+                else if (trackType == TRACK_ELEM_ON_RIDE_PHOTO)
+                {
+                    dst2->SetPhotoTimeout(src2->GetPhotoTimeout());
+                }
+
+                if (_s4.rides[src2->GetRideIndex()].type == RIDE_TYPE_MAZE)
+                {
+                    dst2->SetMazeEntry(src2->GetMazeEntry());
+                }
+                // Skipping IsHighlighted()
 
                 break;
             }
@@ -2496,7 +2504,7 @@ private:
                 uint8_t researchItem = src->Assoc & 0x000000FF;
                 uint8_t researchType = (src->Assoc & 0x00FF0000) >> 16;
 
-                rct_research_item tmpResearchItem = {};
+                ResearchItem tmpResearchItem = {};
                 ConvertResearchEntry(&tmpResearchItem, researchItem, researchType);
                 dst->Assoc = (uint32_t)tmpResearchItem.rawValue;
             }
@@ -2540,7 +2548,7 @@ private:
         gTotalRideValueForMoney = _s4.total_ride_value_for_money;
     }
 
-    void ConvertResearchEntry(rct_research_item* dst, uint8_t srcItem, uint8_t srcType)
+    void ConvertResearchEntry(ResearchItem* dst, uint8_t srcItem, uint8_t srcType)
     {
         dst->rawValue = RESEARCHED_ITEMS_SEPARATOR;
         if (srcType == RCT1_RESEARCH_TYPE_RIDE)
@@ -2618,7 +2626,7 @@ private:
         if (scNumber != -1)
         {
             source_desc sourceDesc;
-            if (scenario_get_source_desc_by_id(scNumber, &sourceDesc))
+            if (ScenarioSources::TryGetById(scNumber, &sourceDesc))
             {
                 rct_string_id localisedStringIds[3];
                 if (language_get_localised_scenario_strings(sourceDesc.title, localisedStringIds))
@@ -2694,7 +2702,7 @@ private:
             for (int32_t y = 0; y < RCT1_MAX_MAP_SIZE; y++)
             {
                 nextFreeTileElement->ClearAs(TILE_ELEMENT_TYPE_SURFACE);
-                nextFreeTileElement->flags = TILE_ELEMENT_FLAG_LAST_TILE;
+                nextFreeTileElement->SetLastForTile(true);
                 nextFreeTileElement->AsSurface()->SetSlope(TILE_ELEMENT_SLOPE_FLAT);
                 nextFreeTileElement->AsSurface()->SetSurfaceStyle(TERRAIN_GRASS);
                 nextFreeTileElement->AsSurface()->SetEdgeStyle(TERRAIN_EDGE_ROCK);
@@ -2708,7 +2716,7 @@ private:
         for (int32_t y = 0; y < 128 * 256; y++)
         {
             nextFreeTileElement->ClearAs(TILE_ELEMENT_TYPE_SURFACE);
-            nextFreeTileElement->flags = TILE_ELEMENT_FLAG_LAST_TILE;
+            nextFreeTileElement->SetLastForTile(true);
             nextFreeTileElement->AsSurface()->SetSlope(TILE_ELEMENT_SLOPE_FLAT);
             nextFreeTileElement->AsSurface()->SetSurfaceStyle(TERRAIN_GRASS);
             nextFreeTileElement->AsSurface()->SetEdgeStyle(TERRAIN_EDGE_ROCK);
@@ -2732,6 +2740,8 @@ private:
             for (int32_t y = 0; y < RCT1_MAX_MAP_SIZE; y++)
             {
                 TileElement* tileElement = map_get_first_element_at(x, y);
+                if (tileElement == nullptr)
+                    continue;
                 do
                 {
                     if (tileElement->GetType() == TILE_ELEMENT_TYPE_WALL)
@@ -2987,6 +2997,8 @@ private:
             for (int32_t y = 0; y < RCT1_MAX_MAP_SIZE; y++)
             {
                 TileElement* tileElement = map_get_first_element_at(x, y);
+                if (tileElement == nullptr)
+                    continue;
                 do
                 {
                     if (tileElement->GetType() == TILE_ELEMENT_TYPE_TRACK)

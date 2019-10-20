@@ -201,12 +201,12 @@ rct_string_id TrackDesign::CreateTrackDesignTrack(const Ride& ride)
 
     do
     {
-        rct_td46_track_element track{};
+        TrackDesignTrackElement track{};
         track.type = trackElement.element->AsTrack()->GetTrackType();
         // TODO move to RCT2 limit
-        if (track.type == TRACK_ELEM_255)
+        if (track.type == TRACK_ELEM_MULTIDIM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP)
         {
-            track.type = TRACK_ELEM_255_ALIAS;
+            track.type = TRACK_ELEM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP_ALIAS;
         }
 
         uint8_t trackFlags;
@@ -220,12 +220,12 @@ rct_string_id TrackDesign::CreateTrackDesignTrack(const Ride& ride)
         }
 
         if (trackElement.element->AsTrack()->HasChain())
-            trackFlags |= (1 << 7);
+            trackFlags |= RCT12_TRACK_ELEMENT_TYPE_FLAG_CHAIN_LIFT;
         trackFlags |= trackElement.element->AsTrack()->GetColourScheme() << 4;
         if (RideData4[ride.type].flags & RIDE_TYPE_FLAG4_HAS_ALTERNATIVE_TRACK_TYPE
             && trackElement.element->AsTrack()->IsInverted())
         {
-            trackFlags |= TRACK_ELEMENT_FLAG_INVERTED;
+            trackFlags |= TD6_TRACK_ELEMENT_FLAG_INVERTED;
         }
 
         track.flags = trackFlags;
@@ -280,27 +280,24 @@ rct_string_id TrackDesign::CreateTrackDesignTrack(const Ride& ride)
             int16_t y = location.y * 32;
 
             TileElement* tileElement = map_get_first_element_at(x >> 5, y >> 5);
+            if (tileElement == nullptr)
+                continue;
+
             do
             {
-                if (tileElement == nullptr)
-                    break;
                 if (tileElement->GetType() != TILE_ELEMENT_TYPE_ENTRANCE)
                     continue;
                 if (tileElement->base_height == z)
                     break;
             } while (!(tileElement++)->IsLastForTile());
 
-            if (tileElement == nullptr)
-            {
-                continue;
-            }
             // Add something that stops this from walking off the end
 
             Direction entranceDirection = tileElement->GetDirection();
             entranceDirection -= _saveDirection;
             entranceDirection &= TILE_ELEMENT_DIRECTION_MASK;
 
-            rct_td6_entrance_element entrance{};
+            TrackDesignEntranceElement entrance{};
             entrance.direction = entranceDirection;
 
             x -= gTrackPreviewOrigin.x;
@@ -320,17 +317,12 @@ rct_string_id TrackDesign::CreateTrackDesignTrack(const Ride& ride)
                 return STR_TRACK_TOO_LARGE_OR_TOO_MUCH_SCENERY;
             }
 
-            if (z == 0xFF)
-            {
-                z = 0x80;
-            }
-
             entrance.z = z;
 
             // If this is the exit version
             if (i == 1)
             {
-                entrance.direction |= (1 << 7);
+                entrance.isExit = true;
             }
             entrance_elements.push_back(entrance);
         }
@@ -379,7 +371,7 @@ rct_string_id TrackDesign::CreateTrackDesignMaze(const Ride& ride)
                 if (tileElement->AsTrack()->GetRideIndex() != ride.id)
                     continue;
 
-                rct_td46_maze_element maze{};
+                TrackDesignMazeElement maze{};
 
                 maze.maze_entry = tileElement->AsTrack()->GetMazeEntry();
                 maze.x = (x - startLoc.x) / 32;
@@ -407,7 +399,7 @@ rct_string_id TrackDesign::CreateTrackDesignMaze(const Ride& ride)
     do
     {
         if (tileElement == nullptr)
-            break;
+            return STR_TRACK_TOO_LARGE_OR_TOO_MUCH_SCENERY;
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_ENTRANCE)
             continue;
         if (tileElement->AsEntrance()->GetEntranceType() != ENTRANCE_TYPE_RIDE_ENTRANCE)
@@ -418,7 +410,7 @@ rct_string_id TrackDesign::CreateTrackDesignMaze(const Ride& ride)
     // Add something that stops this from walking off the end
 
     uint8_t entranceDirection = tileElement->GetDirection();
-    rct_td46_maze_element mazeEntrance{};
+    TrackDesignMazeElement mazeEntrance{};
     mazeEntrance.direction = entranceDirection;
     mazeEntrance.type = 8;
     mazeEntrance.x = (int8_t)((entranceLoc.x - startLoc.x) / 32);
@@ -433,6 +425,8 @@ rct_string_id TrackDesign::CreateTrackDesignMaze(const Ride& ride)
 
     CoordsXY exitLoc = { location.x * 32, location.y * 32 };
     tileElement = map_get_first_element_at(location.x, location.y);
+    if (tileElement == nullptr)
+        return STR_TRACK_TOO_LARGE_OR_TOO_MUCH_SCENERY;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_ENTRANCE)
@@ -445,7 +439,7 @@ rct_string_id TrackDesign::CreateTrackDesignMaze(const Ride& ride)
     // Add something that stops this from walking off the end
 
     uint8_t exit_direction = tileElement->GetDirection();
-    rct_td46_maze_element mazeExit{};
+    TrackDesignMazeElement mazeExit{};
     mazeExit.direction = exit_direction;
     mazeExit.type = 0x80;
     mazeExit.x = (int8_t)((exitLoc.x - startLoc.x) / 32);
@@ -809,7 +803,7 @@ static void track_design_update_max_min_coordinates(int16_t x, int16_t y, int16_
 }
 
 static bool TrackDesignPlaceSceneryElementGetEntry(
-    uint8_t& entry_type, uint8_t& entry_index, const rct_td6_scenery_element& scenery)
+    uint8_t& entry_type, uint8_t& entry_index, const TrackDesignSceneryElement& scenery)
 {
     if (!find_object_in_entry_group(&scenery.scenery_object, &entry_type, &entry_index))
     {
@@ -850,7 +844,7 @@ static bool TrackDesignPlaceSceneryElementGetEntry(
 }
 
 static bool TrackDesignPlaceSceneryElementRemoveGhost(
-    CoordsXY mapCoord, const rct_td6_scenery_element& scenery, uint8_t rotation, int32_t originZ)
+    CoordsXY mapCoord, const TrackDesignSceneryElement& scenery, uint8_t rotation, int32_t originZ)
 {
     uint8_t entry_type, entry_index;
     if (TrackDesignPlaceSceneryElementGetEntry(entry_type, entry_index, scenery))
@@ -905,7 +899,7 @@ static bool TrackDesignPlaceSceneryElementRemoveGhost(
     return true;
 }
 
-static bool TrackDesignPlaceSceneryElementGetPlaceZ(const rct_td6_scenery_element& scenery)
+static bool TrackDesignPlaceSceneryElementGetPlaceZ(const TrackDesignSceneryElement& scenery)
 {
     int32_t z = scenery.z * 8 + _trackDesignPlaceZ;
     if (z < _trackDesignPlaceSceneryZ)
@@ -920,7 +914,7 @@ static bool TrackDesignPlaceSceneryElementGetPlaceZ(const rct_td6_scenery_elemen
 }
 
 static bool TrackDesignPlaceSceneryElement(
-    CoordsXY mapCoord, uint8_t mode, const rct_td6_scenery_element& scenery, uint8_t rotation, int32_t originZ)
+    CoordsXY mapCoord, uint8_t mode, const TrackDesignSceneryElement& scenery, uint8_t rotation, int32_t originZ)
 {
     if (_trackDesignPlaceOperation == PTD_OPERATION_DRAW_OUTLINES && mode == 0)
     {
@@ -1137,15 +1131,15 @@ static bool TrackDesignPlaceSceneryElement(
                         return true;
                     }
 
-                    TileElement* tile_element = map_get_path_element_at(mapCoord.x / 32, mapCoord.y / 32, z);
+                    auto* pathElement = map_get_path_element_at({ mapCoord.x / 32, mapCoord.y / 32, z });
 
-                    if (tile_element == nullptr)
+                    if (pathElement == nullptr)
                     {
                         return true;
                     }
 
                     footpath_queue_chain_reset();
-                    footpath_remove_edges_at(mapCoord.x, mapCoord.y, tile_element);
+                    footpath_remove_edges_at(mapCoord.x, mapCoord.y, reinterpret_cast<TileElement*>(pathElement));
 
                     flags = GAME_COMMAND_FLAG_APPLY;
                     if (_trackDesignPlaceOperation == PTD_OPERATION_PLACE_TRACK_PREVIEW)
@@ -1158,7 +1152,7 @@ static bool TrackDesignPlaceSceneryElement(
                             | GAME_COMMAND_FLAG_GHOST;
                     }
 
-                    footpath_connect_edges(mapCoord.x, mapCoord.y, tile_element, flags);
+                    footpath_connect_edges(mapCoord.x, mapCoord.y, reinterpret_cast<TileElement*>(pathElement), flags);
                     footpath_update_queue_chains();
                     return true;
                 }
@@ -1193,7 +1187,7 @@ static bool TrackDesignPlaceSceneryElement(
  *  rct2: 0x006D0964
  */
 static int32_t track_design_place_all_scenery(
-    const std::vector<rct_td6_scenery_element>& sceneryList, int32_t originX, int32_t originY, int32_t originZ)
+    const std::vector<TrackDesignSceneryElement>& sceneryList, int32_t originX, int32_t originY, int32_t originZ)
 {
     for (uint8_t mode = 0; mode <= 1; mode++)
     {
@@ -1233,7 +1227,7 @@ static int32_t track_design_place_maze(TrackDesign* td6, int16_t x, int16_t y, i
         gMapSelectionTiles.clear();
         gMapSelectArrowPosition.x = x;
         gMapSelectArrowPosition.y = y;
-        gMapSelectArrowPosition.z = tile_element_height(x, y);
+        gMapSelectArrowPosition.z = tile_element_height({ x, y });
         gMapSelectArrowDirection = _currentTrackPieceDirection;
     }
 
@@ -1393,20 +1387,20 @@ static int32_t track_design_place_maze(TrackDesign* td6, int16_t x, int16_t y, i
                 continue;
             }
 
-            TileElement* tile_element = map_get_surface_element_at(mapCoord);
-            int16_t map_height = tile_element->base_height * 8;
-            if (tile_element->AsSurface()->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
+            auto surfaceElement = map_get_surface_element_at(mapCoord);
+            int16_t map_height = surfaceElement->base_height * 8;
+            if (surfaceElement->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
             {
                 map_height += 16;
-                if (tile_element->AsSurface()->GetSlope() & TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT)
+                if (surfaceElement->GetSlope() & TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT)
                 {
                     map_height += 16;
                 }
             }
 
-            if (tile_element->AsSurface()->GetWaterHeight() > 0)
+            if (surfaceElement->GetWaterHeight() > 0)
             {
-                int16_t water_height = tile_element->AsSurface()->GetWaterHeight();
+                int16_t water_height = surfaceElement->GetWaterHeight();
                 water_height *= 16;
                 if (water_height > map_height)
                 {
@@ -1449,7 +1443,7 @@ static bool track_design_place_ride(TrackDesign* td6, int16_t x, int16_t y, int1
         gMapSelectionTiles.clear();
         gMapSelectArrowPosition.x = x;
         gMapSelectArrowPosition.y = y;
-        gMapSelectArrowPosition.z = tile_element_height(x, y);
+        gMapSelectArrowPosition.z = tile_element_height({ x, y });
         gMapSelectArrowDirection = _currentTrackPieceDirection;
     }
 
@@ -1461,9 +1455,9 @@ static bool track_design_place_ride(TrackDesign* td6, int16_t x, int16_t y, int1
     for (const auto& track : td6->track_elements)
     {
         uint8_t trackType = track.type;
-        if (trackType == TRACK_ELEM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP)
+        if (trackType == TRACK_ELEM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP_ALIAS)
         {
-            trackType = 0xFF;
+            trackType = TRACK_ELEM_MULTIDIM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP;
         }
 
         track_design_update_max_min_coordinates(x, y, z);
@@ -1504,11 +1498,11 @@ static bool track_design_place_ride(TrackDesign* td6, int16_t x, int16_t y, int1
                 uint32_t seatRotation = track.flags & 0x0F;
 
                 int32_t liftHillAndAlternativeState = 0;
-                if (track.flags & TRACK_ELEMENT_TYPE_FLAG_CHAIN_LIFT)
+                if (track.flags & RCT12_TRACK_ELEMENT_TYPE_FLAG_CHAIN_LIFT)
                 {
                     liftHillAndAlternativeState |= 1;
                 }
-                if (track.flags & TRACK_ELEMENT_FLAG_INVERTED)
+                if (track.flags & TD6_TRACK_ELEMENT_FLAG_INVERTED)
                 {
                     liftHillAndAlternativeState |= 2;
                 }
@@ -1562,23 +1556,23 @@ static bool track_design_place_ride(TrackDesign* td6, int16_t x, int16_t y, int1
                         continue;
                     }
 
-                    TileElement* tileElement = map_get_surface_element_at(tile);
-                    if (tileElement == nullptr)
+                    auto surfaceElement = map_get_surface_element_at(tile);
+                    if (surfaceElement == nullptr)
                     {
                         return false;
                     }
 
-                    int32_t height = tileElement->base_height * 8;
-                    if (tileElement->AsSurface()->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
+                    int32_t height = surfaceElement->base_height * 8;
+                    if (surfaceElement->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
                     {
                         height += 16;
-                        if (tileElement->AsSurface()->GetSlope() & TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT)
+                        if (surfaceElement->GetSlope() & TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT)
                         {
                             height += 16;
                         }
                     }
 
-                    uint8_t water_height = tileElement->AsSurface()->GetWaterHeight() * 16;
+                    uint8_t water_height = surfaceElement->GetWaterHeight() * 16;
                     if (water_height > 0 && water_height > height)
                     {
                         height = water_height;
@@ -1633,12 +1627,6 @@ static bool track_design_place_ride(TrackDesign* td6, int16_t x, int16_t y, int1
             case PTD_OPERATION_PLACE_TRACK_PREVIEW:
             {
                 rotation = (rotation + entrance.direction) & 3;
-                bool isExit = false;
-                if (entrance.direction & (1 << 7))
-                {
-                    isExit = true;
-                }
-
                 if (_trackDesignPlaceOperation != PTD_OPERATION_PLACE_QUERY)
                 {
                     LocationXY16 tile = {
@@ -1647,7 +1635,12 @@ static bool track_design_place_ride(TrackDesign* td6, int16_t x, int16_t y, int1
                     };
                     TileElement* tile_element = map_get_first_element_at(tile.x >> 5, tile.y >> 5);
                     z = gTrackPreviewOrigin.z / 8;
-                    z += (entrance.z == (int8_t)(uint8_t)0x80) ? -1 : entrance.z;
+                    z += entrance.z;
+                    if (tile_element == nullptr)
+                    {
+                        _trackDesignPlaceCost = MONEY32_UNDEFINED;
+                        return false;
+                    }
 
                     do
                     {
@@ -1679,7 +1672,7 @@ static bool track_design_place_ride(TrackDesign* td6, int16_t x, int16_t y, int1
 
                         gGameCommandErrorTitle = STR_RIDE_CONSTRUCTION_CANT_CONSTRUCT_THIS_HERE;
                         auto rideEntranceExitPlaceAction = RideEntranceExitPlaceAction(
-                            { x, y }, rotation, ride->id, stationIndex, isExit);
+                            { x, y }, rotation, ride->id, stationIndex, entrance.isExit);
                         rideEntranceExitPlaceAction.SetFlags(flags);
                         auto res = flags & GAME_COMMAND_FLAG_APPLY ? GameActions::ExecuteNested(&rideEntranceExitPlaceAction)
                                                                    : GameActions::QueryNested(&rideEntranceExitPlaceAction);
@@ -1697,8 +1690,7 @@ static bool track_design_place_ride(TrackDesign* td6, int16_t x, int16_t y, int1
                 }
                 else
                 {
-                    z = (entrance.z == (int8_t)(uint8_t)0x80) ? -1 : entrance.z;
-                    z *= 8;
+                    z = entrance.z * 8;
                     z += gTrackPreviewOrigin.z;
 
                     auto res = RideEntranceExitPlaceAction::TrackPlaceQuery({ x, y, z }, false);
@@ -2112,7 +2104,7 @@ static money32 place_maze_design(uint8_t flags, Ride* ride, uint16_t mazeEntry, 
 
     if (!gCheatsSandboxMode)
     {
-        if (!map_is_location_owned(floor2(x, 32), floor2(y, 32), z))
+        if (!map_is_location_owned({ x, y, z }))
         {
             return MONEY32_UNDEFINED;
         }
@@ -2121,11 +2113,11 @@ static money32 place_maze_design(uint8_t flags, Ride* ride, uint16_t mazeEntry, 
     // Check support height
     if (!gCheatsDisableSupportLimits)
     {
-        TileElement* tileElement = map_get_surface_element_at({ x, y });
+        auto surfaceElement = map_get_surface_element_at({ x, y });
         uint8_t supportZ = (z + 32) >> 3;
-        if (supportZ > tileElement->base_height)
+        if (supportZ > surfaceElement->base_height)
         {
-            uint8_t supportHeight = (supportZ - tileElement->base_height) / 2;
+            uint8_t supportHeight = (supportZ - surfaceElement->base_height) / 2;
             uint8_t maxSupportHeight = RideData5[RIDE_TYPE_MAZE].max_height;
             if (supportHeight > maxSupportHeight)
             {
@@ -2179,7 +2171,7 @@ static money32 place_maze_design(uint8_t flags, Ride* ride, uint16_t mazeEntry, 
         int32_t fx = floor2(x, 32);
         int32_t fy = floor2(y, 32);
         int32_t fz = z >> 3;
-        TileElement* tileElement = tile_element_insert(fx >> 5, fy >> 5, fz, 15);
+        TileElement* tileElement = tile_element_insert({ fx >> 5, fy >> 5, fz }, 0b1111);
         tileElement->clearance_height = fz + 4;
         tileElement->SetType(TILE_ELEMENT_TYPE_TRACK);
         tileElement->AsTrack()->SetTrackType(TRACK_ELEM_MAZE);
@@ -2332,12 +2324,12 @@ void track_design_draw_preview(TrackDesign* td6, uint8_t* pixels)
     {
         gCurrentRotation = i;
 
-        CoordsXY pos2d = translate_3d_to_2d_with_z(i, centre);
-        pos2d.x -= offset.x;
-        pos2d.y -= offset.y;
+        auto screenCoords = translate_3d_to_2d_with_z(i, centre);
+        screenCoords.x -= offset.x;
+        screenCoords.y -= offset.y;
 
-        int32_t left = pos2d.x;
-        int32_t top = pos2d.y;
+        int32_t left = screenCoords.x;
+        int32_t top = screenCoords.y;
         int32_t right = left + size_x;
         int32_t bottom = top + size_y;
 
@@ -2406,7 +2398,7 @@ static void track_design_preview_clear_map()
     {
         TileElement* tile_element = &gTileElements[i];
         tile_element->ClearAs(TILE_ELEMENT_TYPE_SURFACE);
-        tile_element->flags = TILE_ELEMENT_FLAG_LAST_TILE;
+        tile_element->SetLastForTile(true);
         tile_element->AsSurface()->SetSlope(TILE_ELEMENT_SLOPE_FLAT);
         tile_element->AsSurface()->SetWaterHeight(0);
         tile_element->AsSurface()->SetSurfaceStyle(TERRAIN_GRASS);

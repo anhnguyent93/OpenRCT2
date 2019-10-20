@@ -340,6 +340,8 @@ TileElement* ride_get_station_start_track_element(Ride* ride, int32_t stationInd
 
     // Find the station track element
     TileElement* tileElement = map_get_first_element_at(x, y);
+    if (tileElement == nullptr)
+        return nullptr;
     do
     {
         if (tileElement->GetType() == TILE_ELEMENT_TYPE_TRACK && z == tileElement->base_height)
@@ -354,8 +356,12 @@ TileElement* ride_get_station_exit_element(int32_t x, int32_t y, int32_t z)
 {
     // Find the station track element
     TileElement* tileElement = map_get_first_element_at(x, y);
+    if (tileElement == nullptr)
+        return nullptr;
     do
     {
+        if (tileElement == nullptr)
+            break;
         if (tileElement->GetType() == TILE_ELEMENT_TYPE_ENTRANCE && z == tileElement->base_height)
             return tileElement;
     } while (!(tileElement++)->IsLastForTile());

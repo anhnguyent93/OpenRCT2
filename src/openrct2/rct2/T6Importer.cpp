@@ -138,32 +138,46 @@ public:
 
         if (td->type == RIDE_TYPE_MAZE)
         {
-            rct_td46_maze_element mazeElement{};
-            mazeElement.all = !0;
-            while (mazeElement.all != 0)
+            rct_td46_maze_element t6MazeElement{};
+            t6MazeElement.all = !0;
+            while (t6MazeElement.all != 0)
             {
-                _stream.Read(&mazeElement, sizeof(rct_td46_maze_element));
-                if (mazeElement.all != 0)
+                _stream.Read(&t6MazeElement, sizeof(rct_td46_maze_element));
+                if (t6MazeElement.all != 0)
                 {
+                    TrackDesignMazeElement mazeElement{};
+                    mazeElement.x = t6MazeElement.x;
+                    mazeElement.y = t6MazeElement.y;
+                    mazeElement.direction = t6MazeElement.direction;
+                    mazeElement.type = t6MazeElement.type;
                     td->maze_elements.push_back(mazeElement);
                 }
             }
         }
         else
         {
-            rct_td46_track_element trackElement{};
+            rct_td46_track_element t6TrackElement{};
             for (uint8_t endFlag = _stream.ReadValue<uint8_t>(); endFlag != 0xFF; endFlag = _stream.ReadValue<uint8_t>())
             {
                 _stream.SetPosition(_stream.GetPosition() - 1);
-                _stream.Read(&trackElement, sizeof(rct_td46_track_element));
+                _stream.Read(&t6TrackElement, sizeof(rct_td46_track_element));
+                TrackDesignTrackElement trackElement{};
+                trackElement.type = t6TrackElement.type;
+                trackElement.flags = t6TrackElement.flags;
                 td->track_elements.push_back(trackElement);
             }
 
-            rct_td6_entrance_element entranceElement{};
+            rct_td6_entrance_element t6EntranceElement{};
             for (uint8_t endFlag = _stream.ReadValue<uint8_t>(); endFlag != 0xFF; endFlag = _stream.ReadValue<uint8_t>())
             {
                 _stream.SetPosition(_stream.GetPosition() - 1);
-                _stream.Read(&entranceElement, sizeof(rct_td6_entrance_element));
+                _stream.Read(&t6EntranceElement, sizeof(rct_td6_entrance_element));
+                TrackDesignEntranceElement entranceElement{};
+                entranceElement.z = (t6EntranceElement.z == (int8_t)(uint8_t)0x80) ? -1 : t6EntranceElement.z;
+                entranceElement.direction = t6EntranceElement.direction & 0x7F;
+                entranceElement.x = t6EntranceElement.x;
+                entranceElement.y = t6EntranceElement.y;
+                entranceElement.isExit = t6EntranceElement.direction >> 7;
                 td->entrance_elements.push_back(entranceElement);
             }
         }
@@ -171,8 +185,16 @@ public:
         for (uint8_t endFlag = _stream.ReadValue<uint8_t>(); endFlag != 0xFF; endFlag = _stream.ReadValue<uint8_t>())
         {
             _stream.SetPosition(_stream.GetPosition() - 1);
-            rct_td6_scenery_element sceneryElement{};
-            _stream.Read(&sceneryElement, sizeof(rct_td6_scenery_element));
+            rct_td6_scenery_element t6SceneryElement{};
+            _stream.Read(&t6SceneryElement, sizeof(rct_td6_scenery_element));
+            TrackDesignSceneryElement sceneryElement{};
+            sceneryElement.scenery_object = t6SceneryElement.scenery_object;
+            sceneryElement.x = t6SceneryElement.x;
+            sceneryElement.y = t6SceneryElement.y;
+            sceneryElement.z = t6SceneryElement.z;
+            sceneryElement.flags = t6SceneryElement.flags;
+            sceneryElement.primary_colour = t6SceneryElement.primary_colour;
+            sceneryElement.secondary_colour = t6SceneryElement.secondary_colour;
             td->scenery_elements.push_back(sceneryElement);
         }
 

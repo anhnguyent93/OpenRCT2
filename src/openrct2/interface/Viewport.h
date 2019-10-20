@@ -131,10 +131,10 @@ viewport_focus viewport_update_smart_guest_follow(rct_window* window, Peep* peep
 void viewport_update_smart_staff_follow(rct_window* window, Peep* peep);
 void viewport_update_smart_vehicle_follow(rct_window* window);
 void viewport_render(
-    rct_drawpixelinfo* dpi, rct_viewport* viewport, int32_t left, int32_t top, int32_t right, int32_t bottom,
+    rct_drawpixelinfo* dpi, const rct_viewport* viewport, int32_t left, int32_t top, int32_t right, int32_t bottom,
     std::vector<paint_session>* sessions = nullptr);
 void viewport_paint(
-    rct_viewport* viewport, rct_drawpixelinfo* dpi, int16_t left, int16_t top, int16_t right, int16_t bottom,
+    const rct_viewport* viewport, rct_drawpixelinfo* dpi, int16_t left, int16_t top, int16_t right, int16_t bottom,
     std::vector<paint_session>* sessions = nullptr);
 
 void viewport_adjust_for_map_height(int16_t* x, int16_t* y, int16_t* z);
@@ -165,7 +165,7 @@ int32_t viewport_interaction_get_item_right(int32_t x, int32_t y, viewport_inter
 int32_t viewport_interaction_right_over(int32_t x, int32_t y);
 int32_t viewport_interaction_right_click(int32_t x, int32_t y);
 
-void sub_68A15E(int32_t screenX, int32_t screenY, int16_t* x, int16_t* y, int32_t* direction, TileElement** tileElement);
+void sub_68A15E(int32_t screenX, int32_t screenY, int16_t* x, int16_t* y);
 void sub_68B2B7(paint_session* session, int32_t x, int32_t y);
 
 void viewport_invalidate(rct_viewport* viewport, int32_t left, int32_t top, int32_t right, int32_t bottom);

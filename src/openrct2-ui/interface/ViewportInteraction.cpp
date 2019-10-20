@@ -296,7 +296,7 @@ int32_t viewport_interaction_get_item_right(int32_t x, int32_t y, viewport_inter
             }
             else
             {
-                if (!gCheatsSandboxMode && !map_is_location_owned(info->x, info->y, tileElement->base_height << 4))
+                if (!gCheatsSandboxMode && !map_is_location_owned({ info->x, info->y, tileElement->base_height << 4 }))
                 {
                     return info->type = VIEWPORT_INTERACTION_ITEM_NONE;
                 }
@@ -528,6 +528,8 @@ static void viewport_interaction_remove_footpath(TileElement* tileElement, int32
         footpath_provisional_update();
 
     tileElement2 = map_get_first_element_at(x / 32, y / 32);
+    if (tileElement2 == nullptr)
+        return;
     do
     {
         if (tileElement2->GetType() == TILE_ELEMENT_TYPE_PATH && tileElement2->base_height == z)
@@ -619,7 +621,7 @@ static Peep* viewport_interaction_get_closest_peep(int32_t x, int32_t y, int32_t
     rct_viewport* viewport;
     Peep *peep, *closestPeep;
 
-    w = window_find_from_point(x, y);
+    w = window_find_from_point(ScreenCoordsXY(x, y));
     if (w == nullptr)
         return nullptr;
 
@@ -656,15 +658,18 @@ static Peep* viewport_interaction_get_closest_peep(int32_t x, int32_t y, int32_t
  *
  *  rct2: 0x0068A15E
  */
-void sub_68A15E(int32_t screenX, int32_t screenY, int16_t* x, int16_t* y, int32_t* direction, TileElement** tileElement)
+void sub_68A15E(int32_t screenX, int32_t screenY, int16_t* x, int16_t* y)
 {
-    int16_t my_x, my_y;
+    int16_t mapX, mapY;
+    CoordsXY initialPos{};
     int32_t interactionType;
-    TileElement* myTileElement;
+    TileElement* tileElement;
     rct_viewport* viewport;
     get_map_coordinates_from_pos(
-        screenX, screenY, VIEWPORT_INTERACTION_MASK_TERRAIN & VIEWPORT_INTERACTION_MASK_WATER, &my_x, &my_y, &interactionType,
-        &myTileElement, &viewport);
+        screenX, screenY, VIEWPORT_INTERACTION_MASK_TERRAIN & VIEWPORT_INTERACTION_MASK_WATER, &mapX, &mapY, &interactionType,
+        &tileElement, &viewport);
+    initialPos.x = mapX;
+    initialPos.y = mapY;
 
     if (interactionType == VIEWPORT_INTERACTION_ITEM_NONE)
     {
@@ -672,58 +677,27 @@ void sub_68A15E(int32_t screenX, int32_t screenY, int16_t* x, int16_t* y, int32_
         return;
     }
 
-    int16_t originalZ = 0;
+    int16_t waterHeight = 0;
     if (interactionType == VIEWPORT_INTERACTION_ITEM_WATER)
     {
-        originalZ = myTileElement->AsSurface()->GetWaterHeight() << 4;
+        waterHeight = tileElement->AsSurface()->GetWaterHeight() << 4;
     }
 
-    LocationXY16 start_vp_pos = screen_coord_to_viewport_coord(viewport, screenX, screenY);
-    LocationXY16 map_pos = { (int16_t)(my_x + 16), (int16_t)(my_y + 16) };
+    LocationXY16 initialVPPos = screen_coord_to_viewport_coord(viewport, screenX, screenY);
+    LocationXY16 mapPos = { (int16_t)(initialPos.x + 16), (int16_t)(initialPos.y + 16) };
 
     for (int32_t i = 0; i < 5; i++)
     {
-        int16_t z = originalZ;
+        int16_t z = waterHeight;
         if (interactionType != VIEWPORT_INTERACTION_ITEM_WATER)
         {
-            z = tile_element_height(map_pos.x, map_pos.y);
+            z = tile_element_height({ mapPos.x, mapPos.y });
         }
-        map_pos = viewport_coord_to_map_coord(start_vp_pos.x, start_vp_pos.y, z);
-        map_pos.x = std::clamp<int16_t>(map_pos.x, my_x, my_x + 31);
-        map_pos.y = std::clamp<int16_t>(map_pos.y, my_y, my_y + 31);
+        mapPos = viewport_coord_to_map_coord(initialVPPos.x, initialVPPos.y, z);
+        mapPos.x = std::clamp<int16_t>(mapPos.x, initialPos.x, initialPos.x + 31);
+        mapPos.y = std::clamp<int16_t>(mapPos.y, initialPos.y, initialPos.y + 31);
     }
 
-    // Determine to which edge the cursor is closest
-    int32_t myDirection;
-    int32_t mod_x = map_pos.x & 0x1F;
-    int32_t mod_y = map_pos.y & 0x1F;
-    if (mod_x < mod_y)
-    {
-        if (mod_x + mod_y < 32)
-        {
-            myDirection = 0;
-        }
-        else
-        {
-            myDirection = 1;
-        }
-    }
-    else
-    {
-        if (mod_x + mod_y < 32)
-        {
-            myDirection = 3;
-        }
-        else
-        {
-            myDirection = 2;
-        }
-    }
-
-    *x = map_pos.x & ~0x1F;
-    *y = map_pos.y & ~0x1F;
-    if (direction != nullptr)
-        *direction = myDirection;
-    if (tileElement != nullptr)
-        *tileElement = myTileElement;
+    *x = mapPos.x & ~0x1F;
+    *y = mapPos.y & ~0x1F;
 }

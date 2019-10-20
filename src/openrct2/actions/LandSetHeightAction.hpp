@@ -101,8 +101,8 @@ public:
             }
         }
 
-        TileElement* surfaceElement = map_get_surface_element_at(_coords);
-        TileElement* tileElement = CheckFloatingStructures(surfaceElement, _height);
+        auto* surfaceElement = map_get_surface_element_at(_coords);
+        TileElement* tileElement = CheckFloatingStructures(reinterpret_cast<TileElement*>(surfaceElement), _height);
         if (tileElement != nullptr)
         {
             map_obstruction_set_error_text(tileElement);
@@ -128,7 +128,7 @@ public:
                     GA_ERROR::DISALLOWED, STR_NONE, gGameCommandErrorText, gCommonFormatArgs);
             }
 
-            tileElement = CheckUnremovableObstructions(surfaceElement, zCorner);
+            tileElement = CheckUnremovableObstructions(reinterpret_cast<TileElement*>(surfaceElement), zCorner);
             if (tileElement != nullptr)
             {
                 map_obstruction_set_error_text(tileElement);
@@ -144,7 +144,7 @@ public:
     GameActionResult::Ptr Execute() const override
     {
         money32 cost = MONEY(0, 0);
-        auto surfaceHeight = tile_element_height(_coords.x, _coords.y);
+        auto surfaceHeight = tile_element_height(_coords);
         footpath_remove_litter(_coords.x, _coords.y, surfaceHeight);
 
         if (!gCheatsDisableClearanceChecks)
@@ -154,9 +154,9 @@ public:
             SmallSceneryRemoval();
         }
 
-        TileElement* surfaceElement = map_get_surface_element_at(_coords);
+        auto* surfaceElement = map_get_surface_element_at(_coords);
         cost += GetSurfaceHeightChangeCost(surfaceElement);
-        SetSurfaceHeight(surfaceElement);
+        SetSurfaceHeight(reinterpret_cast<TileElement*>(surfaceElement));
 
         auto res = std::make_unique<GameActionResult>();
         res->Position = { _coords.x + 16, _coords.y + 16, surfaceHeight };
@@ -201,6 +201,8 @@ private:
         TileElement* tileElement = map_get_first_element_at(_coords.x / 32, _coords.y / 32);
         do
         {
+            if (tileElement == nullptr)
+                break;
             if (tileElement->GetType() != TILE_ELEMENT_TYPE_SMALL_SCENERY)
                 continue;
             if (_height > tileElement->clearance_height)
@@ -222,6 +224,8 @@ private:
         TileElement* tileElement = map_get_first_element_at(_coords.x / 32, _coords.y / 32);
         do
         {
+            if (tileElement == nullptr)
+                break;
             if (tileElement->GetType() != TILE_ELEMENT_TYPE_SMALL_SCENERY)
                 continue;
             if (_height > tileElement->clearance_height)
@@ -239,6 +243,8 @@ private:
         TileElement* tileElement = map_get_first_element_at(_coords.x / 32, _coords.y / 32);
         do
         {
+            if (tileElement == nullptr)
+                break;
             if (tileElement->GetType() != TILE_ELEMENT_TYPE_SMALL_SCENERY)
                 continue;
             if (_height > tileElement->clearance_height)
@@ -254,6 +260,8 @@ private:
         TileElement* tileElement = map_get_first_element_at(_coords.x / 32, _coords.y / 32);
         do
         {
+            if (tileElement == nullptr)
+                break;
             if (tileElement->GetType() == TILE_ELEMENT_TYPE_TRACK)
             {
                 ride_id_t rideIndex = tileElement->AsTrack()->GetRideIndex();
@@ -309,6 +317,8 @@ private:
         TileElement* tileElement = map_get_first_element_at(_coords.x / 32, _coords.y / 32);
         do
         {
+            if (tileElement == nullptr)
+                break;
             int32_t elementType = tileElement->GetType();
 
             // Wall's and Small Scenery are removed and therefore do not need checked
@@ -336,10 +346,10 @@ private:
         return nullptr;
     }
 
-    money32 GetSurfaceHeightChangeCost(TileElement * surfaceElement) const
+    money32 GetSurfaceHeightChangeCost(SurfaceElement * surfaceElement) const
     {
         money32 cost{ 0 };
-        for (int32_t i = 0; i < 4; i += 1)
+        for (Direction i : ALL_DIRECTIONS)
         {
             int32_t cornerHeight = tile_element_get_corner_height(surfaceElement, i);
             cornerHeight -= map_get_corner_height(_height, _style & TILE_ELEMENT_SURFACE_SLOPE_MASK, i);

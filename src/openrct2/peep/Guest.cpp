@@ -439,7 +439,7 @@ void Guest::GivePassingPeepsPurpleClothes(Guest* passingPeep)
 {
     passingPeep->tshirt_colour = COLOUR_BRIGHT_PURPLE;
     passingPeep->trousers_colour = COLOUR_BRIGHT_PURPLE;
-    invalidate_sprite_2((rct_sprite*)passingPeep);
+    passingPeep->Invalidate();
 }
 
 void Guest::GivePassingPeepsPizza(Guest* passingPeep)
@@ -455,15 +455,12 @@ void Guest::GivePassingPeepsPizza(Guest* passingPeep)
     {
         if (passingPeep->action == PEEP_ACTION_NONE_1 || passingPeep->action == PEEP_ACTION_NONE_2)
         {
-            Invalidate();
             passingPeep->action = PEEP_ACTION_WAVE_2;
             passingPeep->action_frame = 0;
             passingPeep->action_sprite_image_offset = 0;
             passingPeep->UpdateCurrentActionSpriteType();
-            invalidate_sprite_2((rct_sprite*)passingPeep);
         }
     }
-    invalidate_sprite_2((rct_sprite*)passingPeep);
 }
 
 void Guest::MakePassingPeepsSick(Guest* passingPeep)
@@ -479,7 +476,6 @@ void Guest::MakePassingPeepsSick(Guest* passingPeep)
         passingPeep->action_frame = 0;
         passingPeep->action_sprite_image_offset = 0;
         passingPeep->UpdateCurrentActionSpriteType();
-        invalidate_sprite_2((rct_sprite*)passingPeep);
     }
 }
 
@@ -525,7 +521,6 @@ void Guest::UpdateEasterEggInteractions()
                 action_frame = 0;
                 action_sprite_image_offset = 0;
                 UpdateCurrentActionSpriteType();
-                Invalidate();
             }
         }
     }
@@ -715,7 +710,7 @@ void Guest::Tick128UpdateGuest(int32_t index)
         {
             if (state == PEEP_STATE_WALKING || state == PEEP_STATE_SITTING)
             {
-                audio_play_sound_at_location(SoundId::Crash, x, y, z);
+                audio_play_sound_at_location(SoundId::Crash, { x, y, z });
 
                 sprite_misc_explosion_cloud_create(x, y, z + 16);
                 sprite_misc_explosion_flare_create(x, y, z + 16);
@@ -964,6 +959,8 @@ void Guest::Tick128UpdateGuest(int32_t index)
                     bool found = false;
                     do
                     {
+                        if (tileElement == nullptr)
+                            break;
                         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
                             continue;
                         if (tileElement->base_height != next_z)
@@ -1053,7 +1050,6 @@ void Guest::Tick128UpdateGuest(int32_t index)
                     action_frame = 0;
                     action_sprite_image_offset = 0;
                     UpdateCurrentActionSpriteType();
-                    invalidate_sprite_2((rct_sprite*)this);
                 }
             }
         }
@@ -1236,11 +1232,9 @@ void Guest::UpdateSitting()
             z,
         };
 
-        Invalidate();
         MoveTo(loc.x, loc.y, loc.z);
 
         sprite_direction = ((var_37 + 2) & 3) * 8;
-        Invalidate();
         action = PEEP_ACTION_NONE_1;
         next_action_sprite_type = PEEP_ACTION_SPRITE_TYPE_SITTING_IDLE;
         SwitchNextActionSpriteType();
@@ -1292,7 +1286,6 @@ void Guest::UpdateSitting()
             action_frame = 0;
             action_sprite_image_offset = 0;
             UpdateCurrentActionSpriteType();
-            Invalidate();
             return;
         }
 
@@ -1321,7 +1314,6 @@ void Guest::UpdateSitting()
         action_frame = 0;
         action_sprite_image_offset = 0;
         UpdateCurrentActionSpriteType();
-        Invalidate();
         return;
     }
 }
@@ -1559,7 +1551,7 @@ bool Guest::DecideAndBuyItem(Ride* ride, int32_t shopItem, money32 price)
 loc_69B119:
     if (!hasVoucher)
     {
-        if (price != 0)
+        if (price != 0 && !(gParkFlags & PARK_FLAGS_NO_MONEY))
         {
             if (cash_in_pocket == 0)
             {
@@ -1831,7 +1823,7 @@ void Guest::OnExitRide(ride_id_t rideIndex)
         int32_t laughType = scenario_rand() & 7;
         if (laughType < 3)
         {
-            audio_play_sound_at_location(laughs[laughType], x, y, z);
+            audio_play_sound_at_location(laughs[laughType], { x, y, z });
         }
     }
 
@@ -2062,7 +2054,7 @@ bool Guest::ShouldGoOnRide(Ride* ride, int32_t entranceNum, bool atQueue, bool t
             }
 
             // Basic price checks
-            if (ridePrice != 0 && !peep_has_voucher_for_free_ride(this, ride))
+            if (ridePrice != 0 && !peep_has_voucher_for_free_ride(this, ride) && !(gParkFlags & PARK_FLAGS_NO_MONEY))
             {
                 if (ridePrice > cash_in_pocket)
                 {
@@ -2370,7 +2362,7 @@ void Guest::SpendMoney(money16& peep_expend_type, money32 amount)
         }
     }
 
-    audio_play_sound_at_location(SoundId::Purchase, x, y, z);
+    audio_play_sound_at_location(SoundId::Purchase, { x, y, z });
 }
 
 void Guest::SetHasRidden(const Ride* ride)
@@ -2416,7 +2408,6 @@ void Guest::ReadMap()
         action_frame = 0;
         action_sprite_image_offset = 0;
         UpdateCurrentActionSpriteType();
-        Invalidate();
     }
 }
 
@@ -2652,7 +2643,7 @@ static bool peep_check_ride_price_at_entrance(Guest* peep, Ride* ride, money32 r
         && peep->voucher_arguments == peep->current_ride)
         return true;
 
-    if (peep->cash_in_pocket <= 0)
+    if (peep->cash_in_pocket <= 0 && !(gParkFlags & PARK_FLAGS_NO_MONEY))
     {
         peep->InsertNewThought(PEEP_THOUGHT_TYPE_SPENT_MONEY, PEEP_THOUGHT_ITEM_NONE);
         peep_update_ride_at_entrance_try_leave(peep);
@@ -2941,7 +2932,7 @@ static bool peep_really_liked_ride(Peep* peep, Ride* ride)
  */
 static PeepThoughtType peep_assess_surroundings(int16_t centre_x, int16_t centre_y, int16_t centre_z)
 {
-    if ((tile_element_height(centre_x, centre_y)) > centre_z)
+    if ((tile_element_height({ centre_x, centre_y })) > centre_z)
         return PEEP_THOUGHT_TYPE_NONE;
 
     uint16_t num_scenery = 0;
@@ -2959,7 +2950,8 @@ static PeepThoughtType peep_assess_surroundings(int16_t centre_x, int16_t centre
         for (int16_t y = initial_y; y < final_y; y += 32)
         {
             TileElement* tileElement = map_get_first_element_at(x / 32, y / 32);
-
+            if (tileElement == nullptr)
+                continue;
             do
             {
                 Ride* ride;
@@ -3380,6 +3372,7 @@ void Guest::UpdateBuying()
         if (action != PEEP_ACTION_NONE_2)
         {
             UpdateAction();
+            Invalidate();
             return;
         }
 
@@ -3419,7 +3412,6 @@ void Guest::UpdateBuying()
                 action_sprite_image_offset = 0;
 
                 UpdateCurrentActionSpriteType();
-                Invalidate();
 
                 ride->no_primary_items_sold++;
             }
@@ -3486,8 +3478,6 @@ void Guest::UpdateRideAtEntrance()
     // this is the state it will return to.
     if (destination_tolerance != 0)
     {
-        Invalidate();
-
         int16_t xy_distance;
         if (auto loc = UpdateAction(xy_distance))
         {
@@ -3498,12 +3488,12 @@ void Guest::UpdateRideAtEntrance()
                 actionZ = entrance.z * 8 + 2;
             }
             MoveTo((*loc).x, (*loc).y, actionZ);
-            Invalidate();
         }
         else
         {
             destination_tolerance = 0;
             sprite_direction ^= (1 << 4);
+            Invalidate();
         }
     }
 
@@ -3703,8 +3693,6 @@ void Guest::UpdateRideAdvanceThroughEntrance()
             sub_state = PEEP_RIDE_FREE_VEHICLE_CHECK;
         }
 
-        Invalidate();
-
         actionZ = ride->stations[current_ride_station].Height * 8;
 
         distanceThreshold += 4;
@@ -3714,7 +3702,6 @@ void Guest::UpdateRideAdvanceThroughEntrance()
         }
 
         MoveTo((*loc).x, (*loc).y, actionZ);
-        Invalidate();
         return;
     }
 
@@ -3823,8 +3810,7 @@ static void peep_go_to_ride_exit(Peep* peep, Ride* ride, int16_t x, int16_t y, i
 {
     z += RideData5[ride->type].z;
 
-    sprite_move(x, y, z, (rct_sprite*)peep);
-    peep->Invalidate();
+    peep->MoveTo(x, y, z);
 
     Guard::Assert(peep->current_ride_station < MAX_STATIONS);
     auto exit = ride_get_exit_location(ride, peep->current_ride_station);
@@ -4058,9 +4044,7 @@ void Guest::UpdateRideApproachVehicle()
 {
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
     sub_state = PEEP_RIDE_ENTER_VEHICLE;
@@ -4098,9 +4082,7 @@ void Guest::UpdateRideEnterVehicle()
                     ride->cur_num_customers++;
 
                     vehicle->mass += seatedPeepAsGuest->mass;
-                    seatedPeepAsGuest->Invalidate();
-                    sprite_move(LOCATION_NULL, 0, 0, reinterpret_cast<rct_sprite*>(seatedPeepAsGuest));
-
+                    seatedPeepAsGuest->MoveTo(LOCATION_NULL, 0, 0);
                     seatedPeepAsGuest->SetState(PEEP_STATE_ON_RIDE);
                     seatedPeepAsGuest->time_on_ride = 0;
                     seatedPeepAsGuest->sub_state = PEEP_RIDE_ON_RIDE;
@@ -4114,7 +4096,6 @@ void Guest::UpdateRideEnterVehicle()
             vehicle->mass += mass;
             invalidate_sprite_2(reinterpret_cast<rct_sprite*>(vehicle));
 
-            Invalidate();
             MoveTo(LOCATION_NULL, 0, 0);
 
             SetState(PEEP_STATE_ON_RIDE);
@@ -4198,6 +4179,8 @@ void Guest::UpdateRideLeaveVehicle()
                     continue;
 
                 TileElement* inner_map = map_get_first_element_at(vehicle->track_x / 32, vehicle->track_y / 32);
+                if (inner_map == nullptr)
+                    continue;
                 for (;; inner_map++)
                 {
                     if (inner_map->GetType() != TILE_ELEMENT_TYPE_TRACK)
@@ -4321,7 +4304,6 @@ void Guest::UpdateRideLeaveVehicle()
         exitWaypointLoc.z += 15;
 
     MoveTo(exitWaypointLoc.x, exitWaypointLoc.y, exitWaypointLoc.z);
-    Invalidate();
 
     waypointLoc.x += vehicleEntry->peep_loading_waypoints[var_37 / 4][1].x;
     waypointLoc.y += vehicleEntry->peep_loading_waypoints[var_37 / 4][1].y;
@@ -4387,9 +4369,7 @@ void Guest::UpdateRideApproachExit()
 {
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
 
@@ -4410,21 +4390,17 @@ void Guest::UpdateRideInExit()
 
     if (auto loc = UpdateAction(xy_distance))
     {
-        Invalidate();
-
         if (xy_distance >= 16)
         {
             int16_t actionZ = ride->stations[current_ride_station].Height * 8;
 
             actionZ += RideData5[ride->type].z;
             MoveTo((*loc).x, (*loc).y, actionZ);
-            Invalidate();
             return;
         }
 
         SwitchToSpecialSprite(0);
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
     }
 
     if (ride->lifecycle_flags & RIDE_LIFECYCLE_ON_RIDE_PHOTO)
@@ -4475,9 +4451,7 @@ void Guest::UpdateRideApproachVehicleWaypoints()
         {
             actionZ = z;
         }
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, actionZ);
-        Invalidate();
         return;
     }
 
@@ -4549,9 +4523,7 @@ void Guest::UpdateRideApproachExitWaypoints()
         {
             actionZ = z;
         }
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, actionZ);
-        Invalidate();
         return;
     }
 
@@ -4630,9 +4602,7 @@ void Guest::UpdateRideApproachSpiralSlide()
 
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
 
@@ -4761,7 +4731,6 @@ void Guest::UpdateRideOnSpiralSlide()
                 MoveTo(newX, newY, z);
 
                 sprite_direction = (var_37 & 0xC) * 2;
-                Invalidate();
 
                 var_37++;
                 return;
@@ -4773,11 +4742,10 @@ void Guest::UpdateRideOnSpiralSlide()
 
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
+
     uint8_t waypoint = 2;
     var_37 = (var_37 * 4 & 0x30) + waypoint;
 
@@ -4805,9 +4773,7 @@ void Guest::UpdateRideLeaveSpiralSlide()
     // waypoint 0. Then it readies to leave the ride by the entrance.
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
 
@@ -4887,9 +4853,7 @@ void Guest::UpdateRideMazePathfinding()
 {
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
 
@@ -4911,7 +4875,6 @@ void Guest::UpdateRideMazePathfinding()
             action_frame = 0;
             action_sprite_image_offset = 0;
             UpdateCurrentActionSpriteType();
-            Invalidate();
         }
     }
 
@@ -4979,6 +4942,8 @@ void Guest::UpdateRideMazePathfinding()
     maze_type mazeType = maze_type::invalid;
 
     auto tileElement = map_get_first_element_at(targetLoc.x / 32, targetLoc.y / 32);
+    if (tileElement == nullptr)
+        return;
     do
     {
         if (stationHeight != tileElement->base_height)
@@ -5033,9 +4998,7 @@ void Guest::UpdateRideMazePathfinding()
 
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
 }
@@ -5052,9 +5015,7 @@ void Guest::UpdateRideLeaveExit()
     {
         if (ride != nullptr)
         {
-            Invalidate();
             MoveTo((*loc).x, (*loc).y, ride->stations[current_ride_station].Height * 8);
-            Invalidate();
         }
         return;
     }
@@ -5079,6 +5040,8 @@ void Guest::UpdateRideLeaveExit()
 
     // Find the station track element
     TileElement* tileElement = map_get_first_element_at(targetLoc.x / 32, targetLoc.y / 32);
+    if (tileElement == nullptr)
+        return;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -5093,7 +5056,6 @@ void Guest::UpdateRideLeaveExit()
             continue;
 
         MoveTo(x, y, height);
-        Invalidate();
         return;
     } while (!(tileElement++)->IsLastForTile());
 }
@@ -5106,9 +5068,7 @@ void Guest::UpdateRideShopApproach()
 {
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
 
@@ -5156,7 +5116,7 @@ void Guest::UpdateRideShopInteract()
     // Do not play toilet flush sound on title screen as it's considered loud and annoying
     if (!(gScreenFlags & SCREEN_FLAGS_TITLE_DEMO))
     {
-        audio_play_sound_at_location(SoundId::ToiletFlush, x, y, z);
+        audio_play_sound_at_location(SoundId::ToiletFlush, { x, y, z });
     }
 
     sub_state = PEEP_SHOP_LEAVE;
@@ -5178,9 +5138,7 @@ void Guest::UpdateRideShopLeave()
 {
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
 
         if ((x & 0xFFE0) != next_x)
             return;
@@ -5338,14 +5296,11 @@ void Guest::UpdateWalking()
         {
             if ((0xFFFF & scenario_rand()) < 936)
             {
-                Invalidate();
-
                 action = PEEP_ACTION_WAVE_2;
                 action_frame = 0;
                 action_sprite_image_offset = 0;
 
                 UpdateCurrentActionSpriteType();
-                Invalidate();
             }
         }
     }
@@ -5356,14 +5311,11 @@ void Guest::UpdateWalking()
         {
             if ((0xFFFF & scenario_rand()) < 936)
             {
-                Invalidate();
-
                 action = PEEP_ACTION_TAKE_PHOTO;
                 action_frame = 0;
                 action_sprite_image_offset = 0;
 
                 UpdateCurrentActionSpriteType();
-                Invalidate();
             }
         }
     }
@@ -5374,14 +5326,11 @@ void Guest::UpdateWalking()
         {
             if ((0xFFFF & scenario_rand()) < 936)
             {
-                Invalidate();
-
                 action = PEEP_ACTION_DRAW_PICTURE;
                 action_frame = 0;
                 action_sprite_image_offset = 0;
 
                 UpdateCurrentActionSpriteType();
-                Invalidate();
             }
         }
     }
@@ -5464,16 +5413,13 @@ void Guest::UpdateWalking()
 
     if (GetNextIsSurface())
     {
-        TileElement* tile_element = map_get_surface_element_at({ next_x, next_y });
+        auto surfaceElement = map_get_surface_element_at({ next_x, next_y });
 
-        int32_t water_height = tile_element->AsSurface()->GetWaterHeight();
+        int32_t water_height = surfaceElement->GetWaterHeight();
         if (water_height)
         {
-            Invalidate();
             water_height *= 16;
             MoveTo(x, y, water_height);
-            Invalidate();
-
             SetState(PEEP_STATE_FALLING);
             return;
         }
@@ -5515,6 +5461,8 @@ void Guest::UpdateWalking()
         return;
 
     TileElement* tileElement = map_get_first_element_at(next_x / 32, next_y / 32);
+    if (tileElement == nullptr)
+        return;
 
     for (;; tileElement++)
     {
@@ -5678,7 +5626,6 @@ void Guest::UpdateQueuing()
             action_frame = 0;
             action_sprite_image_offset = 0;
             UpdateCurrentActionSpriteType();
-            Invalidate();
         }
         if (time_in_queue >= 3500 && (0xFFFF & scenario_rand()) <= 93)
         {
@@ -5719,7 +5666,6 @@ void Guest::UpdateQueuing()
                     action_frame = 0;
                     action_sprite_image_offset = 0;
                     UpdateCurrentActionSpriteType();
-                    Invalidate();
                     break;
                 default:
                     break;
@@ -5757,9 +5703,7 @@ void Guest::UpdateEnteringPark()
     }
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
     SetState(PEEP_STATE_FALLING);
@@ -5790,9 +5734,7 @@ void Guest::UpdateLeavingPark()
 
     if (auto loc = UpdateAction())
     {
-        Invalidate();
         MoveTo((*loc).x, (*loc).y, z);
-        Invalidate();
         return;
     }
 
@@ -5808,7 +5750,7 @@ void Guest::UpdateLeavingPark()
     PerformNextAction(pathingResult);
     if (!(pathingResult & PATHING_OUTSIDE_PARK))
         return;
-    peep_sprite_remove(this);
+    Remove();
 }
 
 /**
@@ -5830,7 +5772,6 @@ void Guest::UpdateWatching()
         destination_y = y;
 
         sprite_direction = (var_37 & 3) * 8;
-        Invalidate();
 
         action = PEEP_ACTION_NONE_1;
         next_action_sprite_type = PEEP_ACTION_SPRITE_TYPE_WATCH_RIDE;
@@ -5848,7 +5789,7 @@ void Guest::UpdateWatching()
         {
             // 6917F6
             UpdateAction();
-
+            Invalidate();
             if (action != PEEP_ACTION_NONE_2)
                 return;
             action = PEEP_ACTION_NONE_1;
@@ -5863,7 +5804,6 @@ void Guest::UpdateWatching()
                     action_frame = 0;
                     action_sprite_image_offset = 0;
                     UpdateCurrentActionSpriteType();
-                    Invalidate();
                     return;
                 }
             }
@@ -5874,7 +5814,6 @@ void Guest::UpdateWatching()
                 action_frame = 0;
                 action_sprite_image_offset = 0;
                 UpdateCurrentActionSpriteType();
-                Invalidate();
                 return;
             }
 
@@ -5886,7 +5825,6 @@ void Guest::UpdateWatching()
                     action_frame = 0;
                     action_sprite_image_offset = 0;
                     UpdateCurrentActionSpriteType();
-                    Invalidate();
                     return;
                 }
             }
@@ -5936,10 +5874,13 @@ void Guest::UpdateUsingBin()
             if (action != PEEP_ACTION_NONE_2)
             {
                 UpdateAction();
+                Invalidate();
                 return;
             }
 
             TileElement* tileElement = map_get_first_element_at(next_x / 32, next_y / 32);
+            if (tileElement == nullptr)
+                return;
 
             for (;; tileElement++)
             {
@@ -6108,6 +6049,8 @@ bool Guest::UpdateWalkingFindBench()
         return false;
 
     TileElement* tileElement = map_get_first_element_at(next_x / 32, next_y / 32);
+    if (tileElement == nullptr)
+        return false;
 
     for (;; tileElement++)
     {
@@ -6203,6 +6146,8 @@ bool Guest::UpdateWalkingFindBin()
         return false;
 
     TileElement* tileElement = map_get_first_element_at(peep->next_x / 32, peep->next_y / 32);
+    if (tileElement == nullptr)
+        return false;
 
     for (;; tileElement++)
     {
@@ -6304,6 +6249,8 @@ static void peep_update_walking_break_scenery(Peep* peep)
         return;
 
     TileElement* tileElement = map_get_first_element_at(peep->next_x / 32, peep->next_y / 32);
+    if (tileElement == nullptr)
+        return;
 
     for (;; tileElement++)
     {
@@ -6484,11 +6431,11 @@ bool loc_690FD0(Peep* peep, uint8_t* rideToView, uint8_t* rideSeatToView, TileEl
  */
 static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToView, uint8_t* rideSeatToView)
 {
-    TileElement *tileElement, *surfaceElement;
+    TileElement* tileElement;
 
-    surfaceElement = map_get_surface_element_at({ peep->next_x, peep->next_y });
+    auto surfaceElement = map_get_surface_element_at({ peep->next_x, peep->next_y });
 
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
     if (tileElement == nullptr)
     {
         return false;
@@ -6527,7 +6474,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
 
     surfaceElement = map_get_surface_element_at({ x, y });
 
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
     if (tileElement == nullptr)
     {
         return false;
@@ -6544,7 +6491,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
         }
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_WALL)
             continue;
-        if (tileElement->GetDirectionWithOffset(2) != edge)
+        if (direction_reverse(tileElement->GetDirection()) != edge)
             continue;
         auto wallEntry = tileElement->AsWall()->GetEntry();
         if (wallEntry == nullptr || (wallEntry->wall.flags2 & WALL_SCENERY_2_IS_OPAQUE))
@@ -6559,7 +6506,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
     } while (!(tileElement++)->IsLastForTile());
 
     // TODO: Extract loop B
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
     do
     {
         // Ghosts are purely this-client-side and should not cause any interaction,
@@ -6603,7 +6550,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
     } while (!(tileElement++)->IsLastForTile());
 
     // TODO: Extract loop C
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
     do
     {
         // Ghosts are purely this-client-side and should not cause any interaction,
@@ -6644,7 +6591,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
     surfaceElement = map_get_surface_element_at({ x, y });
 
     // TODO: extract loop A
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
 
     if (tileElement == nullptr)
     {
@@ -6662,7 +6609,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
         }
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_WALL)
             continue;
-        if (tileElement->GetDirectionWithOffset(2) != edge)
+        if (direction_reverse(tileElement->GetDirection()) != edge)
             continue;
         auto wallEntry = tileElement->AsWall()->GetEntry();
         if (wallEntry == nullptr || (wallEntry->wall.flags2 & WALL_SCENERY_2_IS_OPAQUE))
@@ -6676,7 +6623,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
     } while (!(tileElement++)->IsLastForTile());
 
     // TODO: Extract loop B
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
     do
     {
         // Ghosts are purely this-client-side and should not cause any interaction,
@@ -6720,7 +6667,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
     } while (!(tileElement++)->IsLastForTile());
 
     // TODO: Extract loop C
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
     do
     {
         // Ghosts are purely this-client-side and should not cause any interaction,
@@ -6761,7 +6708,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
     surfaceElement = map_get_surface_element_at({ x, y });
 
     // TODO: extract loop A
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
     if (tileElement == nullptr)
     {
         return false;
@@ -6778,7 +6725,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
         }
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_WALL)
             continue;
-        if (tileElement->GetDirectionWithOffset(2) != edge)
+        if (direction_reverse(tileElement->GetDirection()) != edge)
             continue;
         auto wallEntry = tileElement->AsWall()->GetEntry();
         if (wallEntry == nullptr || (wallEntry->wall.flags2 & WALL_SCENERY_2_IS_OPAQUE))
@@ -6792,7 +6739,7 @@ static bool peep_find_ride_to_look_at(Peep* peep, uint8_t edge, uint8_t* rideToV
     } while (!(tileElement++)->IsLastForTile());
 
     // TODO: Extract loop B
-    tileElement = surfaceElement;
+    tileElement = reinterpret_cast<TileElement*>(surfaceElement);
     do
     {
         // Ghosts are purely this-client-side and should not cause any interaction,
@@ -6932,7 +6879,7 @@ void Guest::UpdateSpriteType()
             if ((scenario_rand() & 0xFFFF) <= 13107)
             {
                 isBalloonPopped = true;
-                audio_play_sound_at_location(SoundId::BalloonPop, x, y, z);
+                audio_play_sound_at_location(SoundId::BalloonPop, { x, y, z });
             }
             create_balloon(x, y, z + 9, balloon_colour, isBalloonPopped);
         }
@@ -6947,6 +6894,8 @@ void Guest::UpdateSpriteType()
             TileElement* tileElement = map_get_first_element_at(x / 32, y / 32);
             while (true)
             {
+                if (tileElement == nullptr)
+                    break;
                 if ((z / 8) < tileElement->base_height)
                     break;
 

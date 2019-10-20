@@ -28,18 +28,18 @@ void TileElementBase::SetType(uint8_t newType)
     this->type |= (newType & TILE_ELEMENT_TYPE_MASK);
 }
 
-uint8_t TileElementBase::GetDirection() const
+Direction TileElementBase::GetDirection() const
 {
     return this->type & TILE_ELEMENT_DIRECTION_MASK;
 }
 
-void TileElementBase::SetDirection(uint8_t direction)
+void TileElementBase::SetDirection(Direction direction)
 {
     this->type &= ~TILE_ELEMENT_DIRECTION_MASK;
     this->type |= (direction & TILE_ELEMENT_DIRECTION_MASK);
 }
 
-uint8_t TileElementBase::GetDirectionWithOffset(uint8_t offset) const
+Direction TileElementBase::GetDirectionWithOffset(uint8_t offset) const
 {
     return ((this->type & TILE_ELEMENT_DIRECTION_MASK) + offset) & TILE_ELEMENT_DIRECTION_MASK;
 }
@@ -47,6 +47,14 @@ uint8_t TileElementBase::GetDirectionWithOffset(uint8_t offset) const
 bool TileElementBase::IsLastForTile() const
 {
     return (this->flags & TILE_ELEMENT_FLAG_LAST_TILE) != 0;
+}
+
+void TileElementBase::SetLastForTile(bool on)
+{
+    if (on)
+        flags |= TILE_ELEMENT_FLAG_LAST_TILE;
+    else
+        flags &= ~TILE_ELEMENT_FLAG_LAST_TILE;
 }
 
 bool TileElementBase::IsGhost() const
@@ -154,6 +162,7 @@ void TileElement::ClearAs(uint8_t newType)
     base_height = 2;
     clearance_height = 2;
     std::fill_n(pad_04, sizeof(pad_04), 0x00);
+    std::fill_n(pad_08, sizeof(pad_08), 0x00);
 }
 
 void TileElementBase::Remove()
@@ -203,4 +212,15 @@ const QuarterTile QuarterTile::Rotate(uint8_t amount) const
             log_error("Tried to rotate QuarterTile invalid amount.");
             return QuarterTile{ 0 };
     }
+}
+
+uint8_t TileElementBase::GetOccupiedQuadrants() const
+{
+    return flags & TILE_ELEMENT_OCCUPIED_QUADRANTS_MASK;
+}
+
+void TileElementBase::SetOccupiedQuadrants(uint8_t quadrants)
+{
+    flags &= ~TILE_ELEMENT_OCCUPIED_QUADRANTS_MASK;
+    flags |= (quadrants & TILE_ELEMENT_OCCUPIED_QUADRANTS_MASK);
 }

@@ -13,6 +13,8 @@
 #include "../object/Object.h"
 #include "Ride.h"
 
+typedef uint16_t track_type_t;
+
 #pragma pack(push, 1)
 struct rct_trackdefinition
 {
@@ -53,32 +55,27 @@ struct rct_track_coordinates
 enum
 {
     TRACK_ELEMENT_FLAG_TERMINAL_STATION = 1 << 3,
-    TRACK_ELEMENT_FLAG_INVERTED = 1 << 6,
+    TD6_TRACK_ELEMENT_FLAG_INVERTED = 1 << 6,
 };
 
 enum
 {
-    TRACK_ELEMENT_TYPE_FLAG_CHAIN_LIFT = 1 << 7,
-};
-
-enum
-{
-    // Not anything to do with colour but uses
-    // that field in the map element
-
-    // Used for multi-dimension coaster
-    TRACK_ELEMENT_COLOUR_FLAG_INVERTED = (1 << 2),
-
+    TRACK_ELEMENT_FLAGS2_CHAIN_LIFT = 1 << 0,
+    TRACK_ELEMENT_FLAGS2_INVERTED = 1 << 1,
     // Used for giga coaster
-    TRACK_ELEMENT_COLOUR_FLAG_CABLE_LIFT = (1 << 3),
-
-    TRACK_ELEMENT_DOOR_A_MASK = 0b00011100,
-    TRACK_ELEMENT_DOOR_B_MASK = 0b11100000,
+    TRACK_ELEMENT_FLAGS2_CABLE_LIFT = 1 << 2,
+    TRACK_ELEMENT_FLAGS2_HIGHLIGHT = 1 << 3,
+    TRACK_ELEMENT_FLAGS2_HAS_GREEN_LIGHT = 1 << 4,
 };
 
-#define TRACK_ELEMENT_FLAG_MAGNITUDE_MASK 0x0F
-#define TRACK_ELEMENT_FLAG_COLOUR_MASK 0x30
-#define TRACK_ELEMENT_FLAG_STATION_NO_MASK 0x02
+enum
+{
+    TRACK_ELEMENT_COLOUR_SCHEME_MASK = 0b00000011,
+    // Not colour related, but shares the field.
+    TRACK_ELEMENT_COLOUR_DOOR_A_MASK = 0b00011100,
+    TRACK_ELEMENT_COLOUR_DOOR_B_MASK = 0b11100000,
+    TRACK_ELEMENT_COLOUR_SEAT_ROTATION_MASK = 0b11110000,
+};
 
 #define MAX_STATION_PLATFORM_LENGTH 32
 
@@ -313,9 +310,9 @@ enum
     TRACK_ELEM_BRAKES,
     TRACK_ELEM_ROTATION_CONTROL_TOGGLE = 100,
     TRACK_ELEM_BOOSTER = 100,
-    TRACK_ELEM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP = 101,
     TRACK_ELEM_MAZE = 101,
-    TRACK_ELEM_255_ALIAS = 101, // Used by the multi-dimension coaster, as TD6 cannot handle index 255.
+    TRACK_ELEM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP_ALIAS = 101, // Used by the multi-dimension coaster, as TD6 cannot handle
+                                                                    // index 255.
     TRACK_ELEM_LEFT_QUARTER_BANKED_HELIX_LARGE_UP,
     TRACK_ELEM_RIGHT_QUARTER_BANKED_HELIX_LARGE_UP,
     TRACK_ELEM_LEFT_QUARTER_BANKED_HELIX_LARGE_DOWN,
@@ -469,7 +466,7 @@ enum
     TRACK_ELEM_RIGHT_QUARTER_TURN_1_TILE_90_DEG_DOWN,
     TRACK_ELEM_MULTIDIM_90_DEG_UP_TO_INVERTED_FLAT_QUARTER_LOOP,
     TRACK_ELEM_MULTIDIM_FLAT_TO_90_DEG_DOWN_QUARTER_LOOP,
-    TRACK_ELEM_255,
+    TRACK_ELEM_MULTIDIM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP,
 };
 
 enum

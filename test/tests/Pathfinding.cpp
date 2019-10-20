@@ -83,8 +83,8 @@ protected:
         // Pick the direction the peep should initially move in, given the goal position.
         // This will also store the goal position and initialize pathfinding data for the peep.
         gPeepPathFindGoalPosition = goal;
-        const int32_t moveDir = peep_pathfind_choose_direction(*pos, peep);
-        if (moveDir < 0)
+        const Direction moveDir = peep_pathfind_choose_direction(*pos, peep);
+        if (moveDir == INVALID_DIRECTION)
         {
             // Couldn't determine a direction to move off in
             return false;
@@ -136,7 +136,7 @@ protected:
     static ::testing::AssertionResult AssertIsStartPosition(const char*, const TileCoordsXYZ& location)
     {
         const uint32_t expectedSurfaceStyle = 11u;
-        const uint32_t style = map_get_surface_element_at(location.x, location.y)->AsSurface()->GetSurfaceStyle();
+        const uint32_t style = map_get_surface_element_at(location.x, location.y)->GetSurfaceStyle();
 
         if (style != expectedSurfaceStyle)
             return ::testing::AssertionFailure()
@@ -151,7 +151,7 @@ protected:
     {
         const uint32_t forbiddenSurfaceStyle = 8u;
 
-        const uint32_t style = map_get_surface_element_at(location.x, location.y)->AsSurface()->GetSurfaceStyle();
+        const uint32_t style = map_get_surface_element_at(location.x, location.y)->GetSurfaceStyle();
 
         if (style == forbiddenSurfaceStyle)
             return ::testing::AssertionFailure()

@@ -73,7 +73,7 @@ struct ShelteredEights
 
 using ride_ratings_calculation = void (*)(Ride* ride);
 
-rct_ride_rating_calc_data gRideRatingsCalcData;
+RideRatingCalculationData gRideRatingsCalcData;
 
 static ride_ratings_calculation ride_ratings_get_calculate_func(uint8_t rideType);
 
@@ -207,8 +207,15 @@ static void ride_ratings_update_state_2()
     int32_t trackType = gRideRatingsCalcData.proximity_track_type;
 
     TileElement* tileElement = map_get_first_element_at(x, y);
+    if (tileElement == nullptr)
+    {
+        gRideRatingsCalcData.state = RIDE_RATINGS_STATE_FIND_NEXT_RIDE;
+        return;
+    }
     do
     {
+        if (tileElement->IsGhost())
+            continue;
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_TRACK)
             continue;
         if (tileElement->base_height != z)
@@ -311,8 +318,15 @@ static void ride_ratings_update_state_5()
     int32_t trackType = gRideRatingsCalcData.proximity_track_type;
 
     TileElement* tileElement = map_get_first_element_at(x, y);
+    if (tileElement == nullptr)
+    {
+        gRideRatingsCalcData.state = RIDE_RATINGS_STATE_FIND_NEXT_RIDE;
+        return;
+    }
     do
     {
+        if (tileElement->IsGhost())
+            continue;
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_TRACK)
             continue;
         if (tileElement->base_height != z)
@@ -415,8 +429,13 @@ static void ride_ratings_score_close_proximity_in_direction(TileElement* inputTi
         return;
 
     TileElement* tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return;
     do
     {
+        if (tileElement->IsGhost())
+            continue;
+
         switch (tileElement->GetType())
         {
             case TILE_ELEMENT_TYPE_SURFACE:
@@ -464,8 +483,13 @@ static void ride_ratings_score_close_proximity_in_direction(TileElement* inputTi
 static void ride_ratings_score_close_proximity_loops_helper(TileElement* inputTileElement, int32_t x, int32_t y)
 {
     TileElement* tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return;
     do
     {
+        if (tileElement->IsGhost())
+            continue;
+
         switch (tileElement->GetType())
         {
             case TILE_ELEMENT_TYPE_PATH:
@@ -535,8 +559,13 @@ static void ride_ratings_score_close_proximity(TileElement* inputTileElement)
     int32_t x = gRideRatingsCalcData.proximity_x;
     int32_t y = gRideRatingsCalcData.proximity_y;
     TileElement* tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return;
     do
     {
+        if (tileElement->IsGhost())
+            continue;
+
         int32_t waterHeight;
         switch (tileElement->GetType())
         {
@@ -1409,7 +1438,7 @@ static int32_t ride_ratings_get_scenery_score(Ride* ride)
         y = location.y;
     }
 
-    int32_t z = tile_element_height(x * 32, y * 32);
+    int32_t z = tile_element_height({ x * 32, y * 32 });
 
     // Check if station is underground, returns a fixed mediocre score since you can't have scenery underground
     if (z > ride->stations[i].Height * 8)
@@ -1425,6 +1454,8 @@ static int32_t ride_ratings_get_scenery_score(Ride* ride)
         {
             // Count scenery items on this tile
             TileElement* tileElement = map_get_first_element_at(xx, yy);
+            if (tileElement == nullptr)
+                continue;
             do
             {
                 if (tileElement->IsGhost())

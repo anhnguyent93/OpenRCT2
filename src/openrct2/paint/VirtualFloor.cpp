@@ -233,7 +233,7 @@ static void virtual_floor_get_tile_properties(
         }
     }
 
-    *tileOwned = map_is_location_owned(x, y, height);
+    *tileOwned = map_is_location_owned({ x, y, height });
 
     if (gCheatsSandboxMode)
         *tileOwned = true;
@@ -243,6 +243,8 @@ static void virtual_floor_get_tile_properties(
     //  * Walls / banners, which are displayed as occupied edges
     //  * Ghost objects, which are displayed as lit squares
     TileElement* tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return;
     do
     {
         int32_t elementType = tileElement->GetType();

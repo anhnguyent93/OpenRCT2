@@ -238,7 +238,7 @@ private:
         {
             int32_t x = (ride->overall_view.x * 32) + 16;
             int32_t y = (ride->overall_view.y * 32) + 16;
-            int32_t z = tile_element_height(x, y);
+            int32_t z = tile_element_height({ x, y });
 
             res->Position = { x, y, z };
         }
@@ -295,7 +295,7 @@ private:
             if (it.element->GetType() != TILE_ELEMENT_TYPE_TRACK)
                 continue;
 
-            if (it.element->AsTrack()->GetRideIndex() != _rideIndex)
+            if (it.element->AsTrack()->GetRideIndex() != (ride_idnew_t)_rideIndex)
                 continue;
 
             int32_t x = it.x * 32, y = it.y * 32;
@@ -304,7 +304,7 @@ private:
             uint8_t rotation = it.element->GetDirection();
             uint8_t type = it.element->AsTrack()->GetTrackType();
 
-            if (type != TRACK_ELEM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP)
+            if (type != TRACK_ELEM_MAZE)
             {
                 auto trackRemoveAction = TrackRemoveAction(
                     type, it.element->AsTrack()->GetSequenceIndex(), { x, y, z, rotation });
@@ -332,7 +332,7 @@ private:
                 { 16, 0 },
             };
 
-            for (uint8_t dir = 0; dir < 4; dir++)
+            for (Direction dir : ALL_DIRECTIONS)
             {
                 const LocationXY16& off = DirOffsets[dir];
                 money32 removePrice = MazeRemoveTrack(x + off.x, y + off.y, z, dir);
@@ -366,7 +366,7 @@ private:
         {
             int32_t x = (ride->overall_view.x * 32) + 16;
             int32_t y = (ride->overall_view.y * 32) + 16;
-            int32_t z = tile_element_height(x, y);
+            int32_t z = tile_element_height({ x, y });
 
             res->Position = { x, y, z };
         }

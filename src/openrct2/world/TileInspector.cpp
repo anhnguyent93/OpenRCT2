@@ -65,8 +65,8 @@ static bool map_swap_elements_at(CoordsXY loc, int16_t first, int16_t second)
     // Swap the 'last map element for tile' flag if either one of them was last
     if ((firstElement)->IsLastForTile() || (secondElement)->IsLastForTile())
     {
-        firstElement->flags ^= TILE_ELEMENT_FLAG_LAST_TILE;
-        secondElement->flags ^= TILE_ELEMENT_FLAG_LAST_TILE;
+        firstElement->SetLastForTile(!firstElement->IsLastForTile());
+        secondElement->SetLastForTile(!secondElement->IsLastForTile());
     }
 
     return true;
@@ -89,7 +89,7 @@ GameActionResult::Ptr tile_inspector_insert_corrupt_at(CoordsXY loc, int16_t ele
     {
         // Create new corrupt element
         TileElement* corruptElement = tile_element_insert(
-            loc.x / 32, loc.y / 32, -1, 0); // Ugly hack: -1 guarantees this to be placed first
+            { loc.x / 32, loc.y / 32, -1 }, 0b0000); // Ugly hack: -1 guarantees this to be placed first
         if (corruptElement == nullptr)
         {
             log_warning("Failed to insert corrupt element.");
@@ -99,7 +99,7 @@ GameActionResult::Ptr tile_inspector_insert_corrupt_at(CoordsXY loc, int16_t ele
 
         // Set the base height to be the same as the selected element
         TileElement* const selectedElement = map_get_nth_element_at(loc.x / 32, loc.y / 32, elementIndex + 1);
-        if (!selectedElement)
+        if (selectedElement == nullptr)
         {
             return std::make_unique<GameActionResult>(GA_ERROR::UNKNOWN, STR_NONE);
         }
@@ -153,7 +153,7 @@ GameActionResult::Ptr tile_inspector_remove_element_at(CoordsXY loc, int16_t ele
     {
         // Forcefully remove the element
         TileElement* const tileElement = map_get_nth_element_at(loc.x / 32, loc.y / 32, elementIndex);
-        if (!tileElement)
+        if (tileElement == nullptr)
         {
             return std::make_unique<GameActionResult>(GA_ERROR::UNKNOWN, STR_NONE);
         }
@@ -218,7 +218,7 @@ GameActionResult::Ptr tile_inspector_rotate_element_at(CoordsXY loc, int32_t ele
         uint8_t newRotation, pathEdges, pathCorners;
 
         TileElement* const tileElement = map_get_nth_element_at(loc.x / 32, loc.y / 32, elementIndex);
-        if (!tileElement)
+        if (tileElement == nullptr)
         {
             return std::make_unique<GameActionResult>(GA_ERROR::UNKNOWN, STR_NONE);
         }
@@ -320,15 +320,13 @@ GameActionResult::Ptr tile_inspector_paste_element_at(CoordsXY loc, TileElement 
             tile_element_set_banner_index(&element, newBannerIndex);
         }
 
-        TileElement* const pastedElement = tile_element_insert(loc.x / 32, loc.y / 32, element.base_height, 0);
+        // The occupiedQuadrants will be automatically set when the element is copied over, so it's not necessary to set them
+        // correctly _here_.
+        TileElement* const pastedElement = tile_element_insert({ loc.x / 32, loc.y / 32, element.base_height }, 0b0000);
 
         bool lastForTile = pastedElement->IsLastForTile();
         *pastedElement = element;
-        pastedElement->flags &= ~TILE_ELEMENT_FLAG_LAST_TILE;
-        if (lastForTile)
-        {
-            pastedElement->flags |= TILE_ELEMENT_FLAG_LAST_TILE;
-        }
+        pastedElement->SetLastForTile(lastForTile);
 
         map_invalidate_tile_full(loc.x, loc.y);
 
@@ -357,6 +355,8 @@ GameActionResult::Ptr tile_inspector_sort_elements_at(CoordsXY loc, bool isExecu
     if (isExecuting)
     {
         const TileElement* const firstElement = map_get_first_element_at(loc.x / 32, loc.y / 32);
+        if (firstElement == nullptr)
+            return std::make_unique<GameActionResult>(GA_ERROR::UNKNOWN, STR_NONE);
 
         // Count elements on tile
         int32_t numElement = 0;
@@ -469,7 +469,7 @@ GameActionResult::Ptr tile_inspector_any_base_height_offset(
 
 GameActionResult::Ptr tile_inspector_surface_show_park_fences(CoordsXY loc, bool showFences, bool isExecuting)
 {
-    TileElement* const surfaceelement = map_get_surface_element_at(loc);
+    auto* const surfaceelement = map_get_surface_element_at(loc);
 
     // No surface element on tile
     if (surfaceelement == nullptr)
@@ -478,7 +478,7 @@ GameActionResult::Ptr tile_inspector_surface_show_park_fences(CoordsXY loc, bool
     if (isExecuting)
     {
         if (!showFences)
-            surfaceelement->AsSurface()->SetParkFences(0);
+            surfaceelement->SetParkFences(0);
         else
             update_park_fences(loc);
 
@@ -497,7 +497,7 @@ GameActionResult::Ptr tile_inspector_surface_show_park_fences(CoordsXY loc, bool
 
 GameActionResult::Ptr tile_inspector_surface_toggle_corner(CoordsXY loc, int32_t cornerIndex, bool isExecuting)
 {
-    TileElement* const surfaceElement = map_get_surface_element_at(loc);
+    auto* const surfaceElement = map_get_surface_element_at(loc);
 
     // No surface element on tile
     if (surfaceElement == nullptr)
@@ -505,12 +505,12 @@ GameActionResult::Ptr tile_inspector_surface_toggle_corner(CoordsXY loc, int32_t
 
     if (isExecuting)
     {
-        const uint8_t originalSlope = surfaceElement->AsSurface()->GetSlope();
+        const uint8_t originalSlope = surfaceElement->GetSlope();
         const bool diagonal = (originalSlope & TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT) >> 4;
 
-        uint8_t newSlope = surfaceElement->AsSurface()->GetSlope() ^ (1 << cornerIndex);
-        surfaceElement->AsSurface()->SetSlope(newSlope);
-        if (surfaceElement->AsSurface()->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
+        uint8_t newSlope = surfaceElement->GetSlope() ^ (1 << cornerIndex);
+        surfaceElement->SetSlope(newSlope);
+        if (surfaceElement->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
         {
             surfaceElement->clearance_height = surfaceElement->base_height + 2;
         }
@@ -520,7 +520,7 @@ GameActionResult::Ptr tile_inspector_surface_toggle_corner(CoordsXY loc, int32_t
         }
 
         // All corners are raised
-        if ((surfaceElement->AsSurface()->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP) == TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
+        if ((surfaceElement->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP) == TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
         {
             uint8_t slope = TILE_ELEMENT_SLOPE_FLAT;
 
@@ -542,7 +542,7 @@ GameActionResult::Ptr tile_inspector_surface_toggle_corner(CoordsXY loc, int32_t
                         break;
                 }
             }
-            surfaceElement->AsSurface()->SetSlope(slope);
+            surfaceElement->SetSlope(slope);
 
             // Update base and clearance heights
             surfaceElement->base_height += 2;
@@ -564,7 +564,7 @@ GameActionResult::Ptr tile_inspector_surface_toggle_corner(CoordsXY loc, int32_t
 
 GameActionResult::Ptr tile_inspector_surface_toggle_diagonal(CoordsXY loc, bool isExecuting)
 {
-    TileElement* const surfaceElement = map_get_surface_element_at(loc);
+    auto* const surfaceElement = map_get_surface_element_at(loc);
 
     // No surface element on tile
     if (surfaceElement == nullptr)
@@ -572,13 +572,13 @@ GameActionResult::Ptr tile_inspector_surface_toggle_diagonal(CoordsXY loc, bool 
 
     if (isExecuting)
     {
-        uint8_t newSlope = surfaceElement->AsSurface()->GetSlope() ^ TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT;
-        surfaceElement->AsSurface()->SetSlope(newSlope);
-        if (surfaceElement->AsSurface()->GetSlope() & TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT)
+        uint8_t newSlope = surfaceElement->GetSlope() ^ TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT;
+        surfaceElement->SetSlope(newSlope);
+        if (surfaceElement->GetSlope() & TILE_ELEMENT_SLOPE_DOUBLE_HEIGHT)
         {
             surfaceElement->clearance_height = surfaceElement->base_height + 4;
         }
-        else if (surfaceElement->AsSurface()->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
+        else if (surfaceElement->GetSlope() & TILE_ELEMENT_SLOPE_ALL_CORNERS_UP)
         {
             surfaceElement->clearance_height = surfaceElement->base_height + 2;
         }
@@ -743,10 +743,10 @@ GameActionResult::Ptr tile_inspector_wall_set_slope(CoordsXY loc, int32_t elemen
 GameActionResult::Ptr tile_inspector_track_base_height_offset(
     CoordsXY loc, int32_t elementIndex, int8_t offset, bool isExecuting)
 {
-    TileElement* const trackElement = map_get_nth_element_at(loc.x / 32, loc.y / 32, elementIndex);
-
     if (offset == 0)
         return std::make_unique<GameActionResult>();
+
+    TileElement* const trackElement = map_get_nth_element_at(loc.x / 32, loc.y / 32, elementIndex);
 
     if (trackElement == nullptr || trackElement->GetType() != TILE_ELEMENT_TYPE_TRACK)
         return std::make_unique<GameActionResult>(GA_ERROR::UNKNOWN, STR_NONE);
@@ -791,6 +791,9 @@ GameActionResult::Ptr tile_inspector_track_base_height_offset(
             TileElement* tileElement = map_get_first_element_at(elem.x >> 5, elem.y >> 5);
             do
             {
+                if (tileElement == nullptr)
+                    break;
+
                 if (tileElement->base_height != elemZ / 8)
                     continue;
 
@@ -895,6 +898,9 @@ GameActionResult::Ptr tile_inspector_track_set_chain(
             TileElement* tileElement = map_get_first_element_at(elem.x >> 5, elem.y >> 5);
             do
             {
+                if (tileElement == nullptr)
+                    break;
+
                 if (tileElement->base_height != elemZ / 8)
                     continue;
 
@@ -1004,8 +1010,7 @@ GameActionResult::Ptr tile_inspector_scenery_set_quarter_location(
         tileElement->AsSmallScenery()->SetSceneryQuadrant(quarterIndex);
 
         // Update collision
-        tileElement->flags &= 0xF0;
-        tileElement->flags |= 1 << ((quarterIndex + 2) & 3);
+        tileElement->SetOccupiedQuadrants(1 << ((quarterIndex + 2) & 3));
 
         map_invalidate_tile_full(loc.x, loc.y);
         if ((uint32_t)(loc.x / 32) == windowTileInspectorTileX && (uint32_t)(loc.y / 32) == windowTileInspectorTileY)
@@ -1027,7 +1032,9 @@ GameActionResult::Ptr tile_inspector_scenery_set_quarter_collision(
 
     if (isExecuting)
     {
-        tileElement->flags ^= 1 << quarterIndex;
+        auto occupiedQuadrants = tileElement->GetOccupiedQuadrants();
+        occupiedQuadrants ^= 1 << quarterIndex;
+        tileElement->SetOccupiedQuadrants(occupiedQuadrants);
 
         map_invalidate_tile_full(loc.x, loc.y);
         if ((uint32_t)(loc.x / 32) == windowTileInspectorTileX && (uint32_t)(loc.y / 32) == windowTileInspectorTileY)

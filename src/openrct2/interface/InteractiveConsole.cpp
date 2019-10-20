@@ -907,7 +907,7 @@ static int32_t cc_set(InteractiveConsole& console, const arguments_t& argv)
             {
                 int32_t x = (int16_t)(int_val[0] * 32 + 16);
                 int32_t y = (int16_t)(int_val[1] * 32 + 16);
-                int32_t z = tile_element_height(x, y);
+                int32_t z = tile_element_height({ x, y });
                 w->SetLocation(x, y, z);
                 viewport_update_position(w);
                 console.Execute("get location");
@@ -1211,6 +1211,8 @@ static int32_t cc_remove_park_fences(InteractiveConsole& console, [[maybe_unused
         }
     } while (tile_element_iterator_next(&it));
 
+    gfx_invalidate_screen();
+
     console.WriteFormatLine("Park fences have been removed.");
     return 0;
 }
@@ -1251,6 +1253,7 @@ static int32_t cc_show_limits(InteractiveConsole& console, [[maybe_unused]] cons
     console.WriteFormatLine("Banners: %d/%zu", bannerCount, MAX_BANNERS);
     console.WriteFormatLine("Rides: %d/%d", rideCount, MAX_RIDES);
     console.WriteFormatLine("Staff: %d/%d", staffCount, STAFF_MAX_COUNT);
+    console.WriteFormatLine("Images: %zu/%zu", ImageListGetUsedCount(), ImageListGetMaximum());
     return 0;
 }
 

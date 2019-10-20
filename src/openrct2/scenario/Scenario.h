@@ -238,7 +238,7 @@ struct rct_s6_data
     uint8_t last_entrance_style;
     uint8_t rct1_water_colour;
     uint8_t pad_01358842[2];
-    rct_research_item research_items[MAX_RESEARCH_ITEMS];
+    RCT12ResearchItem research_items[MAX_RESEARCH_ITEMS];
     uint16_t map_base_z;
     char scenario_name[64];
     char scenario_description[256];
@@ -263,7 +263,7 @@ struct rct_s6_data
     RCT12MapAnimation map_animations[RCT2_MAX_ANIMATED_OBJECTS];
     uint16_t num_map_animations;
     uint8_t pad_0138B582[2];
-    rct_ride_rating_calc_data ride_ratings_calc_data;
+    RCT2RideRatingCalculationData ride_ratings_calc_data;
     uint8_t pad_0138B5D0[60];
     RCT12RideMeasurement ride_measurements[8];
     uint32_t next_guest_index;
@@ -395,6 +395,7 @@ extern char gScenarioFileName[260];
 void load_from_sc6(const char* path);
 void scenario_begin();
 void scenario_update();
+bool scenario_create_ducks();
 
 const random_engine_t::state_type& scenario_rand_state();
 void scenario_rand_seed(random_engine_t::result_type s0, random_engine_t::result_type s1);

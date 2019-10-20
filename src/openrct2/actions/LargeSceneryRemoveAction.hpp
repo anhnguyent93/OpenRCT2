@@ -56,7 +56,7 @@ public:
 
         const uint32_t flags = GetFlags();
 
-        int32_t z = tile_element_height(_loc.x, _loc.x);
+        int32_t z = tile_element_height(_loc);
         res->Position.x = _loc.x + 16;
         res->Position.y = _loc.y + 16;
         res->Position.z = z;
@@ -96,7 +96,7 @@ public:
 
             if (!(gScreenFlags & SCREEN_FLAGS_SCENARIO_EDITOR) && !gCheatsSandboxMode)
             {
-                if (!map_is_location_owned(currentTile.x, currentTile.y, currentTile.z))
+                if (!map_is_location_owned({ currentTile.x, currentTile.y, currentTile.z }))
                 {
                     return MakeResult(GA_ERROR::NO_CLEARANCE, STR_CANT_REMOVE_THIS, STR_LAND_NOT_OWNED_BY_PARK);
                 }
@@ -126,7 +126,7 @@ public:
 
         const uint32_t flags = GetFlags();
 
-        int32_t z = tile_element_height(_loc.x, _loc.y);
+        int32_t z = tile_element_height(_loc);
         res->Position.x = _loc.x + 16;
         res->Position.y = _loc.y + 16;
         res->Position.z = z;
@@ -167,7 +167,7 @@ public:
 
             if (!(gScreenFlags & SCREEN_FLAGS_SCENARIO_EDITOR) && !gCheatsSandboxMode)
             {
-                if (!map_is_location_owned(currentTile.x, currentTile.y, currentTile.z))
+                if (!map_is_location_owned({ currentTile.x, currentTile.y, currentTile.z }))
                 {
                     return MakeResult(GA_ERROR::NO_CLEARANCE, STR_CANT_REMOVE_THIS, STR_LAND_NOT_OWNED_BY_PARK);
                 }
@@ -175,30 +175,33 @@ public:
 
             TileElement* sceneryElement = map_get_first_element_at(currentTile.x / 32, currentTile.y / 32);
             bool element_found = false;
-            do
+            if (sceneryElement != nullptr)
             {
-                if (sceneryElement->GetType() != TILE_ELEMENT_TYPE_LARGE_SCENERY)
-                    continue;
+                do
+                {
+                    if (sceneryElement->GetType() != TILE_ELEMENT_TYPE_LARGE_SCENERY)
+                        continue;
 
-                if (sceneryElement->GetDirection() != _loc.direction)
-                    continue;
+                    if (sceneryElement->GetDirection() != _loc.direction)
+                        continue;
 
-                if (sceneryElement->AsLargeScenery()->GetSequenceIndex() != i)
-                    continue;
+                    if (sceneryElement->AsLargeScenery()->GetSequenceIndex() != i)
+                        continue;
 
-                if (sceneryElement->base_height != currentTile.z / 8)
-                    continue;
+                    if (sceneryElement->base_height != currentTile.z / 8)
+                        continue;
 
-                // If we are removing ghost elements
-                if ((flags & GAME_COMMAND_FLAG_GHOST) && sceneryElement->IsGhost() == false)
-                    continue;
+                    // If we are removing ghost elements
+                    if ((flags & GAME_COMMAND_FLAG_GHOST) && sceneryElement->IsGhost() == false)
+                        continue;
 
-                map_invalidate_tile_full(currentTile.x, currentTile.y);
-                tile_element_remove(sceneryElement);
+                    map_invalidate_tile_full(currentTile.x, currentTile.y);
+                    tile_element_remove(sceneryElement);
 
-                element_found = true;
-                break;
-            } while (!(sceneryElement++)->IsLastForTile());
+                    element_found = true;
+                    break;
+                } while (!(sceneryElement++)->IsLastForTile());
+            }
 
             if (element_found == false)
             {

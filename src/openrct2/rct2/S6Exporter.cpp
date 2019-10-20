@@ -194,10 +194,7 @@ void S6Exporter::Export()
     _s6.scenario_srand_0 = state.s0;
     _s6.scenario_srand_1 = state.s1;
 
-    std::memcpy(_s6.tile_elements, gTileElements, sizeof(_s6.tile_elements));
-
-    _s6.next_free_tile_element_pointer_index = gNextFreeTileElementPointerIndex;
-
+    ExportTileElements();
     ExportSprites();
     ExportParkName();
 
@@ -356,7 +353,7 @@ void S6Exporter::Export()
 
     ExportMapAnimations();
 
-    _s6.ride_ratings_calc_data = gRideRatingsCalcData;
+    ExportRideRatingsCalcData();
     ExportRideMeasurements();
     _s6.next_guest_index = gNextGuestNumber;
     _s6.grass_and_scenery_tilepos = gGrassSceneryTileLoopPosition;
@@ -726,6 +723,30 @@ void S6Exporter::ExportRide(rct2_ride* dst, const Ride* src)
     // pad_208[0x58];
 }
 
+void S6Exporter::ExportRideRatingsCalcData()
+{
+    const auto& src = gRideRatingsCalcData;
+    auto& dst = _s6.ride_ratings_calc_data;
+    dst.proximity_x = src.proximity_x;
+    dst.proximity_y = src.proximity_y;
+    dst.proximity_z = src.proximity_z;
+    dst.proximity_start_x = src.proximity_start_x;
+    dst.proximity_start_y = src.proximity_start_y;
+    dst.proximity_start_z = src.proximity_start_z;
+    dst.current_ride = src.current_ride;
+    dst.state = src.state;
+    dst.proximity_track_type = src.proximity_track_type;
+    dst.proximity_base_height = src.proximity_base_height;
+    dst.proximity_total = src.proximity_total;
+    for (size_t i = 0; i < std::size(dst.proximity_scores); i++)
+    {
+        dst.proximity_scores[i] = src.proximity_scores[i];
+    }
+    dst.num_brakes = src.num_brakes;
+    dst.num_reversers = src.num_reversers;
+    dst.station_flags = src.station_flags;
+}
+
 void S6Exporter::ExportRideMeasurements()
 {
     // Get all the ride measurements
@@ -827,7 +848,18 @@ void S6Exporter::ExportResearchedSceneryItems()
 
 void S6Exporter::ExportResearchList()
 {
-    std::memcpy(_s6.research_items, gResearchItems, sizeof(_s6.research_items));
+    size_t i = 0;
+    for (const auto& researchItem : gResearchItemsInvented)
+    {
+        _s6.research_items[i++] = RCT12ResearchItem{ researchItem.rawValue, researchItem.category };
+    }
+    _s6.research_items[i++] = { RCT12_RESEARCHED_ITEMS_SEPARATOR, 0 };
+    for (const auto& researchItem : gResearchItemsUninvented)
+    {
+        _s6.research_items[i++] = RCT12ResearchItem{ researchItem.rawValue, researchItem.category };
+    }
+    _s6.research_items[i++] = { RCT12_RESEARCHED_ITEMS_END, 0 };
+    _s6.research_items[i] = { RCT12_RESEARCHED_ITEMS_END_2, 0 };
 }
 
 void S6Exporter::ExportMarketingCampaigns()
@@ -1145,16 +1177,16 @@ void S6Exporter::ExportSpriteMisc(RCT12SpriteBase* cdst, const rct_sprite_common
     {
         case SPRITE_MISC_STEAM_PARTICLE:
         {
-            auto src = (const RCT12SpriteSteamParticle*)csrc;
-            auto dst = (rct_steam_particle*)cdst;
+            auto src = (const rct_steam_particle*)csrc;
+            auto dst = (RCT12SpriteSteamParticle*)cdst;
             dst->time_to_move = src->time_to_move;
             dst->frame = src->frame;
             break;
         }
         case SPRITE_MISC_MONEY_EFFECT:
         {
-            auto src = (const RCT12SpriteMoneyEffect*)csrc;
-            auto dst = (rct_money_effect*)cdst;
+            auto src = (const rct_money_effect*)csrc;
+            auto dst = (RCT12SpriteMoneyEffect*)cdst;
             dst->move_delay = src->move_delay;
             dst->num_movements = src->num_movements;
             dst->vertical = src->vertical;
@@ -1165,8 +1197,8 @@ void S6Exporter::ExportSpriteMisc(RCT12SpriteBase* cdst, const rct_sprite_common
         }
         case SPRITE_MISC_CRASHED_VEHICLE_PARTICLE:
         {
-            auto src = (const RCT12SpriteCrashedVehicleParticle*)csrc;
-            auto dst = (rct_crashed_vehicle_particle*)cdst;
+            auto src = (const rct_crashed_vehicle_particle*)csrc;
+            auto dst = (RCT12SpriteCrashedVehicleParticle*)cdst;
             dst->frame = src->frame;
             dst->time_to_live = src->time_to_live;
             dst->frame = src->frame;
@@ -1185,8 +1217,8 @@ void S6Exporter::ExportSpriteMisc(RCT12SpriteBase* cdst, const rct_sprite_common
         case SPRITE_MISC_EXPLOSION_FLARE:
         case SPRITE_MISC_CRASH_SPLASH:
         {
-            auto src = (const rct_sprite_generic*)csrc;
-            auto dst = (RCT12SpriteParticle*)cdst;
+            auto src = (const RCT12SpriteParticle*)csrc;
+            auto dst = (rct_sprite_generic*)cdst;
             dst->frame = src->frame;
             break;
         }
@@ -1299,6 +1331,183 @@ void S6Exporter::ExportMapAnimations()
         dst.x = src.location.x;
         dst.y = src.location.y;
         dst.baseZ = src.location.z;
+    }
+}
+
+void S6Exporter::ExportTileElements()
+{
+    for (uint32_t index = 0; index < RCT2_MAX_TILE_ELEMENTS; index++)
+    {
+        auto src = &gTileElements[index];
+        auto dst = &_s6.tile_elements[index];
+        if (src->base_height == 0xFF)
+        {
+            std::memcpy(dst, src, sizeof(*dst));
+        }
+        else
+        {
+            auto tileElementType = (RCT12TileElementType)src->GetType();
+            if (tileElementType == RCT12TileElementType::Corrupt || tileElementType == RCT12TileElementType::EightCarsCorrupt14
+                || tileElementType == RCT12TileElementType::EightCarsCorrupt15)
+                std::memcpy(dst, src, sizeof(*dst));
+            else
+                ExportTileElement(dst, src);
+        }
+    }
+    _s6.next_free_tile_element_pointer_index = gNextFreeTileElementPointerIndex;
+}
+
+void S6Exporter::ExportTileElement(RCT12TileElement* dst, TileElement* src)
+{
+    // Todo: allow for changing defition of OpenRCT2 tile element types - replace with a map
+    uint8_t tileElementType = src->GetType();
+    dst->ClearAs(tileElementType);
+    dst->SetDirection(src->GetDirection());
+    dst->flags = src->flags;
+    dst->base_height = src->base_height;
+    dst->clearance_height = src->clearance_height;
+
+    switch (tileElementType)
+    {
+        case TILE_ELEMENT_TYPE_SURFACE:
+        {
+            auto dst2 = dst->AsSurface();
+            auto src2 = src->AsSurface();
+
+            dst2->SetSlope(src2->GetSlope());
+            dst2->SetSurfaceStyle(src2->GetSurfaceStyle());
+            dst2->SetEdgeStyle(src2->GetEdgeStyle());
+            dst2->SetGrassLength(src2->GetGrassLength());
+            dst2->SetOwnership(src2->GetOwnership());
+            dst2->SetParkFences(src2->GetParkFences());
+            dst2->SetWaterHeight(src2->GetWaterHeight());
+            dst2->SetHasTrackThatNeedsWater(src2->HasTrackThatNeedsWater());
+
+            break;
+        }
+        case TILE_ELEMENT_TYPE_PATH:
+        {
+            auto dst2 = dst->AsPath();
+            auto src2 = src->AsPath();
+
+            dst2->SetPathEntryIndex(src2->GetPathEntryIndex());
+            dst2->SetQueueBannerDirection(src2->GetQueueBannerDirection());
+            dst2->SetSloped(src2->IsSloped());
+            dst2->SetSlopeDirection(src2->GetSlopeDirection());
+            dst2->SetRideIndex(src2->GetRideIndex());
+            dst2->SetStationIndex(src2->GetStationIndex());
+            dst2->SetWide(src2->IsWide());
+            dst2->SetIsQueue(src2->IsQueue());
+            dst2->SetHasQueueBanner(src2->HasQueueBanner());
+            dst2->SetEdges(src2->GetEdges());
+            dst2->SetCorners(src2->GetCorners());
+            dst2->SetAddition(src2->GetAddition());
+            dst2->SetAdditionIsGhost(src2->AdditionIsGhost());
+            dst2->SetAdditionStatus(src2->GetAdditionStatus());
+
+            break;
+        }
+        case TILE_ELEMENT_TYPE_TRACK:
+        {
+            auto dst2 = dst->AsTrack();
+            auto src2 = src->AsTrack();
+
+            dst2->SetTrackType(src2->GetTrackType());
+            dst2->SetSequenceIndex(src2->GetSequenceIndex());
+            dst2->SetRideIndex(src2->GetRideIndex());
+            dst2->SetColourScheme(src2->GetColourScheme());
+            dst2->SetStationIndex(src2->GetStationIndex());
+            dst2->SetHasGreenLight(src2->HasGreenLight());
+            dst2->SetHasChain(src2->HasChain());
+            dst2->SetHasCableLift(src2->HasCableLift());
+            dst2->SetInverted(src2->IsInverted());
+            dst2->SetBrakeBoosterSpeed(src2->GetBrakeBoosterSpeed());
+            dst2->SetPhotoTimeout(src2->GetPhotoTimeout());
+
+            auto ride = get_ride(dst2->GetRideIndex());
+            if (ride)
+            {
+                if (ride->type == RIDE_TYPE_MULTI_DIMENSION_ROLLER_COASTER)
+                {
+                    dst2->SetSeatRotation(src2->GetSeatRotation());
+                }
+                else if (ride->type == RIDE_TYPE_MAZE)
+                {
+                    dst2->SetMazeEntry(src2->GetMazeEntry());
+                }
+            }
+            // Skipping IsHighlighted()
+
+            break;
+        }
+        case TILE_ELEMENT_TYPE_SMALL_SCENERY:
+        {
+            auto dst2 = dst->AsSmallScenery();
+            auto src2 = src->AsSmallScenery();
+
+            dst2->SetEntryIndex(src2->GetEntryIndex());
+            dst2->SetAge(src2->GetAge());
+            dst2->SetSceneryQuadrant(src2->GetSceneryQuadrant());
+            dst2->SetPrimaryColour(src2->GetPrimaryColour());
+            dst2->SetSecondaryColour(src2->GetSecondaryColour());
+            if (src2->NeedsSupports())
+                dst2->SetNeedsSupports();
+
+            break;
+        }
+        case TILE_ELEMENT_TYPE_ENTRANCE:
+        {
+            auto dst2 = dst->AsEntrance();
+            auto src2 = src->AsEntrance();
+
+            dst2->SetEntranceType(src2->GetEntranceType());
+            dst2->SetRideIndex(src2->GetRideIndex());
+            dst2->SetStationIndex(src2->GetStationIndex());
+            dst2->SetSequenceIndex(src2->GetSequenceIndex());
+            dst2->SetPathType(src2->GetPathType());
+
+            break;
+        }
+        case TILE_ELEMENT_TYPE_WALL:
+        {
+            auto dst2 = dst->AsWall();
+            auto src2 = src->AsWall();
+
+            dst2->SetEntryIndex(src2->GetEntryIndex());
+            dst2->SetSlope(src2->GetSlope());
+            dst2->SetPrimaryColour(src2->GetPrimaryColour());
+            dst2->SetSecondaryColour(src2->GetSecondaryColour());
+            dst2->SetTertiaryColour(src2->GetTertiaryColour());
+            dst2->SetAnimationFrame(src2->GetAnimationFrame());
+            dst2->SetBannerIndex(src2->GetBannerIndex());
+            dst2->SetAcrossTrack(src2->IsAcrossTrack());
+            dst2->SetAnimationIsBackwards(src2->AnimationIsBackwards());
+            break;
+        }
+        case TILE_ELEMENT_TYPE_LARGE_SCENERY:
+        {
+            auto dst2 = dst->AsLargeScenery();
+            auto src2 = src->AsLargeScenery();
+
+            dst2->SetEntryIndex(src2->GetEntryIndex());
+            dst2->SetSequenceIndex(src2->GetSequenceIndex());
+            dst2->SetPrimaryColour(src2->GetPrimaryColour());
+            dst2->SetSecondaryColour(src2->GetSecondaryColour());
+            dst2->SetBannerIndex(src2->GetBannerIndex());
+            break;
+        }
+        case TILE_ELEMENT_TYPE_BANNER:
+        {
+            auto dst2 = dst->AsBanner();
+            auto src2 = src->AsBanner();
+
+            dst2->SetIndex(src2->GetIndex());
+            dst2->SetPosition(src2->GetPosition());
+            dst2->SetAllowedEdges(src2->GetAllowedEdges());
+            break;
+        }
+        default:
+            assert(false);
     }
 }
 

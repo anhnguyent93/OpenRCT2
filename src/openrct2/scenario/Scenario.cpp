@@ -18,6 +18,7 @@
 #include "../ParkImporter.h"
 #include "../audio/audio.h"
 #include "../config/Config.h"
+#include "../core/Guard.hpp"
 #include "../core/Random.hpp"
 #include "../interface/Viewport.h"
 #include "../localisation/Date.h"
@@ -81,7 +82,6 @@ money32 gScenarioCompanyValueRecord;
 
 char gScenarioFileName[MAX_PATH];
 
-static int32_t scenario_create_ducks();
 static void scenario_objective_check();
 
 using namespace OpenRCT2;
@@ -115,7 +115,7 @@ void scenario_begin()
 
     {
         utf8 normalisedName[64];
-        scenario_normalise_name(normalisedName, sizeof(normalisedName), gS6Info.name);
+        ScenarioSources::NormaliseName(normalisedName, sizeof(normalisedName), gS6Info.name);
 
         rct_string_id localisedStringIds[3];
         if (language_get_localised_scenario_strings(normalisedName, localisedStringIds))
@@ -415,63 +415,74 @@ void scenario_update()
     }
     scenario_update_daynight_cycle();
 }
-
 /**
  *
  *  rct2: 0x006744A9
  */
-static int32_t scenario_create_ducks()
+bool scenario_create_ducks()
 {
-    int32_t i, j, r, c, x, y, waterZ, centreWaterZ, x2, y2;
+    // Check NxN area around centre tile defined by SquareSize
+    constexpr int32_t SquareSize = 7;
+    constexpr int32_t SquareCentre = SquareSize / 2;
+    constexpr int32_t SquareRadiusSize = SquareCentre * 32;
 
-    r = scenario_rand();
-    x = ((r >> 16) & 0xFFFF) & 0x7F;
-    y = (r & 0xFFFF) & 0x7F;
-    x = (x + 64) * 32;
-    y = (y + 64) * 32;
+    CoordsXY centrePos;
+    centrePos.x = SquareRadiusSize + (scenario_rand_max(MAXIMUM_MAP_SIZE_TECHNICAL - SquareCentre) * 32);
+    centrePos.y = SquareRadiusSize + (scenario_rand_max(MAXIMUM_MAP_SIZE_TECHNICAL - SquareCentre) * 32);
 
-    if (!map_is_location_in_park({ x, y }))
-        return 0;
+    Guard::Assert(map_is_location_valid(centrePos));
 
-    centreWaterZ = (tile_element_water_height(x, y));
+    if (!map_is_location_in_park(centrePos))
+        return false;
+
+    int32_t centreWaterZ = (tile_element_water_height(centrePos));
     if (centreWaterZ == 0)
-        return 0;
+        return false;
 
-    // Check 7x7 area around centre tile
-    x2 = x - (32 * 3);
-    y2 = y - (32 * 3);
-    c = 0;
-    for (i = 0; i < 7; i++)
+    CoordsXY innerPos{ centrePos.x - (32 * SquareCentre), centrePos.y - (32 * SquareCentre) };
+    int32_t waterTiles = 0;
+    for (int32_t y = 0; y < SquareSize; y++)
     {
-        for (j = 0; j < 7; j++)
+        for (int32_t x = 0; x < SquareSize; x++)
         {
-            waterZ = (tile_element_water_height(x2, y2));
-            if (waterZ == centreWaterZ)
-                c++;
+            if (!map_is_location_valid(innerPos))
+                continue;
 
-            x2 += 32;
+            if (!map_is_location_in_park(innerPos))
+                continue;
+
+            int32_t waterZ = (tile_element_water_height(innerPos));
+            if (waterZ == centreWaterZ)
+                waterTiles++;
+
+            innerPos.x += 32;
         }
-        x2 -= 224;
-        y2 += 32;
+        innerPos.x -= SquareSize * 32;
+        innerPos.y += 32;
     }
 
     // Must be at least 25 water tiles of the same height in 7x7 area
-    if (c < 25)
-        return 0;
+    if (waterTiles < 25)
+        return false;
 
     // Set x, y to the centre of the tile
-    x += 16;
-    y += 16;
-    c = (scenario_rand() & 3) + 2;
-    for (i = 0; i < c; i++)
+    centrePos.x += 16;
+    centrePos.y += 16;
+
+    uint32_t duckCount = (scenario_rand() % 4) + 2;
+    for (uint32_t i = 0; i < duckCount; i++)
     {
-        r = scenario_rand();
-        x2 = (r >> 16) & 0x7F;
-        y2 = (r & 0xFFFF) & 0x7F;
-        create_duck(x + x2 - 64, y + y2 - 64);
+        uint32_t r = scenario_rand();
+        innerPos.x = (r >> 16) % SquareRadiusSize;
+        innerPos.y = (r & 0xFFFF) % SquareRadiusSize;
+
+        CoordsXY targetPos{ centrePos.x + innerPos.x - SquareRadiusSize, centrePos.y + innerPos.y - SquareRadiusSize };
+
+        Guard::Assert(map_is_location_valid(targetPos));
+        create_duck(targetPos);
     }
 
-    return 1;
+    return true;
 }
 
 const random_engine_t::state_type& scenario_rand_state()
@@ -605,11 +616,28 @@ bool scenario_prepare_for_save()
 
 /**
  * Modifies the given S6 data so that ghost elements, rides with no track elements or unused banners / user strings are saved.
- *
- * TODO: This employs some black casting magic that should go away once we export to our own format instead of SV6.
  */
 void scenario_fix_ghosts(rct_s6_data* s6)
 {
+    // Build tile pointer cache (needed to get the first element at a certain location)
+    RCT12TileElement* tilePointers[MAX_TILE_TILE_ELEMENT_POINTERS];
+    for (size_t i = 0; i < MAX_TILE_TILE_ELEMENT_POINTERS; i++)
+    {
+        tilePointers[i] = TILE_UNDEFINED_TILE_ELEMENT;
+    }
+
+    RCT12TileElement* tileElement = s6->tile_elements;
+    RCT12TileElement** tile = tilePointers;
+    for (size_t y = 0; y < MAXIMUM_MAP_SIZE_TECHNICAL; y++)
+    {
+        for (size_t x = 0; x < MAXIMUM_MAP_SIZE_TECHNICAL; x++)
+        {
+            *tile++ = tileElement;
+            while (!(tileElement++)->IsLastForTile())
+                ;
+        }
+    }
+
     // Remove all ghost elements
     RCT12TileElement* destinationElement = s6->tile_elements;
 
@@ -617,12 +645,13 @@ void scenario_fix_ghosts(rct_s6_data* s6)
     {
         for (int32_t x = 0; x < MAXIMUM_MAP_SIZE_TECHNICAL; x++)
         {
-            RCT12TileElement* originalElement = reinterpret_cast<RCT12TileElement*>(map_get_first_element_at(x, y));
+            // This is the equivalent of map_get_first_element_at(x, y), but on S6 data.
+            RCT12TileElement* originalElement = tilePointers[x + y * MAXIMUM_MAP_SIZE_TECHNICAL];
             do
             {
                 if (originalElement->IsGhost())
                 {
-                    BannerIndex bannerIndex = tile_element_get_banner_index(reinterpret_cast<TileElement*>(originalElement));
+                    BannerIndex bannerIndex = originalElement->GetBannerIndex();
                     if (bannerIndex != BANNER_INDEX_NULL)
                     {
                         auto banner = &s6->banners[bannerIndex];
@@ -730,10 +759,10 @@ static void scenario_objective_check_park_value_by()
 static void scenario_objective_check_10_rollercoasters()
 {
     auto rcs = 0;
-    std::bitset<RIDE_TYPE_COUNT> type_already_counted;
+    std::bitset<MAX_RIDE_OBJECTS> type_already_counted;
     for (const auto& ride : GetRideManager())
     {
-        if (ride.status == RIDE_STATUS_OPEN && ride.excitement >= RIDE_RATING(6, 00) && ride.subtype < RIDE_TYPE_COUNT)
+        if (ride.status == RIDE_STATUS_OPEN && ride.excitement >= RIDE_RATING(6, 00) && ride.subtype != RIDE_ENTRY_INDEX_NULL)
         {
             auto rideEntry = ride.GetRideEntry();
             if (rideEntry != nullptr)
@@ -824,11 +853,11 @@ static void scenario_objective_check_monthly_ride_income()
 static void scenario_objective_check_10_rollercoasters_length()
 {
     const auto objective_length = gScenarioObjectiveNumGuests;
-    std::bitset<RIDE_TYPE_COUNT> type_already_counted;
+    std::bitset<MAX_RIDE_OBJECTS> type_already_counted;
     auto rcs = 0;
     for (const auto& ride : GetRideManager())
     {
-        if (ride.status == RIDE_STATUS_OPEN && ride.excitement >= RIDE_RATING(7, 00) && ride.subtype < RIDE_TYPE_COUNT)
+        if (ride.status == RIDE_STATUS_OPEN && ride.excitement >= RIDE_RATING(7, 00) && ride.subtype != RIDE_ENTRY_INDEX_NULL)
         {
             auto rideEntry = ride.GetRideEntry();
             if (rideEntry != nullptr)

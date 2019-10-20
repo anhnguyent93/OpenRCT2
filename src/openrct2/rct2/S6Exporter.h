@@ -62,11 +62,15 @@ private:
     void ExportResearchList();
     void ExportMarketingCampaigns();
     void ExportPeepSpawns();
+    void ExportRideRatingsCalcData();
     void ExportRideMeasurements();
     void ExportRideMeasurement(RCT12RideMeasurement& dst, const RideMeasurement& src);
     void ExportBanners();
     void ExportBanner(RCT12Banner& dst, const Banner& src);
     void ExportMapAnimations();
+
+    void ExportTileElements();
+    void ExportTileElement(RCT12TileElement* dst, TileElement* src);
 
     opt::optional<uint16_t> AllocateUserString(const std::string_view& value);
     void ExportUserStrings();

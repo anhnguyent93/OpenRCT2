@@ -33,8 +33,16 @@ T6Exporter::T6Exporter(TrackDesign* trackDesign)
 
 bool T6Exporter::SaveTrack(const utf8* path)
 {
-    auto fs = FileStream(path, FILE_MODE_WRITE);
-    return SaveTrack(&fs);
+    try
+    {
+        auto fs = FileStream(path, FILE_MODE_WRITE);
+        return SaveTrack(&fs);
+    }
+    catch (const std::exception& e)
+    {
+        log_error("Unable to save track design: %s", e.what());
+        return false;
+    }
 }
 
 bool T6Exporter::SaveTrack(IStream* stream)
@@ -99,8 +107,8 @@ bool T6Exporter::SaveTrack(IStream* stream)
 
         for (const auto& entranceElement : _trackDesign->entrance_elements)
         {
-            tempStream.WriteValue<uint8_t>(entranceElement.z);
-            tempStream.WriteValue<uint8_t>(entranceElement.direction);
+            tempStream.WriteValue<uint8_t>(entranceElement.z == -1 ? (uint8_t)0x80 : entranceElement.z);
+            tempStream.WriteValue<uint8_t>(entranceElement.direction | (entranceElement.isExit << 7));
             tempStream.WriteValue<int16_t>(entranceElement.x);
             tempStream.WriteValue<int16_t>(entranceElement.y);
         }

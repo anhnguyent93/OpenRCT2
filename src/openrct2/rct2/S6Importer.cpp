@@ -39,6 +39,7 @@
 #include "../ride/RideRatings.h"
 #include "../ride/ShopItem.h"
 #include "../ride/Station.h"
+#include "../ride/Track.h"
 #include "../scenario/Scenario.h"
 #include "../scenario/ScenarioRepository.h"
 #include "../util/SawyerCoding.h"
@@ -381,7 +382,7 @@ public:
         gSavedViewZoom = _s6.saved_view_zoom;
         gSavedViewRotation = _s6.saved_view_rotation;
 
-        gRideRatingsCalcData = _s6.ride_ratings_calc_data;
+        ImportRideRatingsCalcData();
         ImportRideMeasurements();
         gNextGuestNumber = _s6.next_guest_index;
         gGrassSceneryTileLoopPosition = _s6.grass_and_scenery_tilepos;
@@ -535,7 +536,7 @@ public:
             if (src->exits[i].xy == RCT_XY8_UNDEFINED)
                 ride_clear_exit_location(dst, i);
             else
-                ride_set_exit_location(dst, i, { src->entrances[i].x, src->entrances[i].y, src->station_heights[i], 0 });
+                ride_set_exit_location(dst, i, { src->exits[i].x, src->exits[i].y, src->station_heights[i], 0 });
 
             dst->stations[i].LastPeepInQueue = src->last_peep_in_queue[i];
 
@@ -745,6 +746,31 @@ public:
         // pad_208[0x58];
     }
 
+    void ImportRideRatingsCalcData()
+    {
+        const auto& src = _s6.ride_ratings_calc_data;
+        auto& dst = gRideRatingsCalcData;
+        dst = {};
+        dst.proximity_x = src.proximity_x;
+        dst.proximity_y = src.proximity_y;
+        dst.proximity_z = src.proximity_z;
+        dst.proximity_start_x = src.proximity_start_x;
+        dst.proximity_start_y = src.proximity_start_y;
+        dst.proximity_start_z = src.proximity_start_z;
+        dst.current_ride = src.current_ride;
+        dst.state = src.state;
+        dst.proximity_track_type = src.proximity_track_type;
+        dst.proximity_base_height = src.proximity_base_height;
+        dst.proximity_total = src.proximity_total;
+        for (size_t i = 0; i < std::size(src.proximity_scores); i++)
+        {
+            dst.proximity_scores[i] = src.proximity_scores[i];
+        }
+        dst.num_brakes = src.num_brakes;
+        dst.num_reversers = src.num_reversers;
+        dst.station_flags = src.station_flags;
+    }
+
     void ImportRideMeasurements()
     {
         for (const auto& src : _s6.ride_measurements)
@@ -825,7 +851,25 @@ public:
 
     void ImportResearchList()
     {
-        std::memcpy(gResearchItems, _s6.research_items, sizeof(_s6.research_items));
+        bool invented = true;
+        for (size_t i = 0; i < sizeof(_s6.research_items); i++)
+        {
+            if (_s6.research_items[i].IsInventedEndMarker())
+            {
+                invented = false;
+                continue;
+            }
+            else if (_s6.research_items[i].IsUninventedEndMarker() || _s6.research_items[i].IsRandomEndMarker())
+            {
+                break;
+            }
+
+            RCT12ResearchItem* ri = &_s6.research_items[i];
+            if (invented)
+                gResearchItemsInvented.push_back(ResearchItem{ ri->rawValue, ri->category });
+            else
+                gResearchItemsUninvented.push_back(ResearchItem{ ri->rawValue, ri->category });
+        }
     }
 
     void ImportBanner(Banner* dst, const RCT12Banner* src)
@@ -885,6 +929,12 @@ public:
         else if (String::Equals(_s6.scenario_filename, "Amity Airfield.SC6"))
         {
             _s6.peep_spawns[0].y = 1296;
+        }
+        // #9926: Africa - Oasis has peeps spawning on the edge underground near the entrance
+        else if (String::Equals(_s6.scenario_filename, "Africa - Oasis.SC6"))
+        {
+            _s6.peep_spawns[0].y = 2128;
+            _s6.peep_spawns[0].z = 7;
         }
 
         gPeepSpawns.clear();
@@ -1001,16 +1051,32 @@ public:
                 dst2->SetSequenceIndex(src2->GetSequenceIndex());
                 dst2->SetRideIndex(src2->GetRideIndex());
                 dst2->SetColourScheme(src2->GetColourScheme());
-                dst2->SetStationIndex(src2->GetStationIndex());
                 dst2->SetHasChain(src2->HasChain());
                 dst2->SetHasCableLift(src2->HasCableLift());
                 dst2->SetInverted(src2->IsInverted());
-                dst2->SetBrakeBoosterSpeed(src2->GetBrakeBoosterSpeed());
+                dst2->SetStationIndex(src2->GetStationIndex());
                 dst2->SetHasGreenLight(src2->HasGreenLight());
-                dst2->SetSeatRotation(src2->GetSeatRotation());
-                dst2->SetMazeEntry(src2->GetMazeEntry());
-                dst2->SetPhotoTimeout(src2->GetPhotoTimeout());
+
+                auto trackType = dst2->GetTrackType();
+                if (track_element_has_speed_setting(trackType))
+                {
+                    dst2->SetBrakeBoosterSpeed(src2->GetBrakeBoosterSpeed());
+                }
+                else if (trackType == TRACK_ELEM_ON_RIDE_PHOTO)
+                {
+                    dst2->SetPhotoTimeout(src2->GetPhotoTimeout());
+                }
+
                 // Skipping IsHighlighted()
+                auto rideType = _s6.rides[src2->GetRideIndex()].type;
+                if (rideType == RIDE_TYPE_MULTI_DIMENSION_ROLLER_COASTER)
+                {
+                    dst2->SetSeatRotation(src2->GetSeatRotation());
+                }
+                else if (rideType == RIDE_TYPE_MAZE)
+                {
+                    dst2->SetMazeEntry(src2->GetMazeEntry());
+                }
 
                 break;
             }
@@ -1401,16 +1467,16 @@ public:
         {
             case SPRITE_MISC_STEAM_PARTICLE:
             {
-                auto src = (const rct_steam_particle*)csrc;
-                auto dst = (RCT12SpriteSteamParticle*)cdst;
+                auto src = (const RCT12SpriteSteamParticle*)csrc;
+                auto dst = (rct_steam_particle*)cdst;
                 dst->time_to_move = src->time_to_move;
                 dst->frame = src->frame;
                 break;
             }
             case SPRITE_MISC_MONEY_EFFECT:
             {
-                auto src = (const rct_money_effect*)csrc;
-                auto dst = (RCT12SpriteMoneyEffect*)cdst;
+                auto src = (const RCT12SpriteMoneyEffect*)csrc;
+                auto dst = (rct_money_effect*)cdst;
                 dst->move_delay = src->move_delay;
                 dst->num_movements = src->num_movements;
                 dst->vertical = src->vertical;
@@ -1421,8 +1487,8 @@ public:
             }
             case SPRITE_MISC_CRASHED_VEHICLE_PARTICLE:
             {
-                auto src = (const rct_crashed_vehicle_particle*)csrc;
-                auto dst = (RCT12SpriteCrashedVehicleParticle*)cdst;
+                auto src = (const RCT12SpriteCrashedVehicleParticle*)csrc;
+                auto dst = (rct_crashed_vehicle_particle*)cdst;
                 dst->frame = src->frame;
                 dst->time_to_live = src->time_to_live;
                 dst->frame = src->frame;

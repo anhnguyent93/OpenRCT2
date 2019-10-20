@@ -155,6 +155,8 @@ static void sub_68B3FB(paint_session* session, int32_t x, int32_t y)
     session->MapPosition.y = y;
 
     TileElement* tile_element = map_get_first_element_at(x >> 5, y >> 5);
+    if (tile_element == nullptr)
+        return;
     uint8_t rotation = session->CurrentRotation;
 
     bool partOfVirtualFloor = false;
@@ -248,7 +250,7 @@ static void sub_68B3FB(paint_session* session, int32_t x, int32_t y)
         if ((session->ViewFlags & VIEWPORT_FLAG_CLIP_VIEW) && (tile_element->base_height > gClipHeight))
             continue;
 
-        int32_t direction = tile_element->GetDirectionWithOffset(rotation);
+        Direction direction = tile_element->GetDirectionWithOffset(rotation);
         int32_t height = tile_element->base_height * 8;
 
         // If we are on a new height level, look through elements on the

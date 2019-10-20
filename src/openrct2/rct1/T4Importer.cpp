@@ -253,24 +253,32 @@ private:
 
         if (td->type == RIDE_TYPE_MAZE)
         {
-            rct_td46_maze_element mazeElement{};
-            mazeElement.all = !0;
-            while (mazeElement.all != 0)
+            rct_td46_maze_element t4MazeElement{};
+            t4MazeElement.all = !0;
+            while (t4MazeElement.all != 0)
             {
-                _stream.Read(&mazeElement, sizeof(rct_td46_maze_element));
-                if (mazeElement.all != 0)
+                _stream.Read(&t4MazeElement, sizeof(rct_td46_maze_element));
+                if (t4MazeElement.all != 0)
                 {
+                    TrackDesignMazeElement mazeElement{};
+                    mazeElement.x = t4MazeElement.x;
+                    mazeElement.y = t4MazeElement.y;
+                    mazeElement.direction = t4MazeElement.direction;
+                    mazeElement.type = t4MazeElement.type;
                     td->maze_elements.push_back(mazeElement);
                 }
             }
         }
         else
         {
-            rct_td46_track_element trackElement{};
+            rct_td46_track_element t4TrackElement{};
             for (uint8_t endFlag = _stream.ReadValue<uint8_t>(); endFlag != 0xFF; endFlag = _stream.ReadValue<uint8_t>())
             {
                 _stream.SetPosition(_stream.GetPosition() - 1);
-                _stream.Read(&trackElement, sizeof(rct_td46_track_element));
+                _stream.Read(&t4TrackElement, sizeof(rct_td46_track_element));
+                TrackDesignTrackElement trackElement{};
+                trackElement.type = t4TrackElement.type;
+                trackElement.flags = t4TrackElement.flags;
                 td->track_elements.push_back(trackElement);
             }
         }

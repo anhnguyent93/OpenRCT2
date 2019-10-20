@@ -21,9 +21,62 @@ struct Ride;
 
 #define TRACK_PREVIEW_IMAGE_SIZE (370 * 217)
 
+/* Track Entrance entry */
+struct TrackDesignEntranceElement
+{
+    int8_t z;
+    uint8_t direction;
+    int16_t x;
+    int16_t y;
+    bool isExit;
+};
+
+/* Track Scenery entry  size: 0x16 */
+struct TrackDesignSceneryElement
+{
+    rct_object_entry scenery_object; // 0x00
+    int8_t x;                        // 0x10
+    int8_t y;                        // 0x11
+    int8_t z;                        // 0x12
+    uint8_t flags;                   // 0x13 direction quadrant tertiary colour
+    uint8_t primary_colour;          // 0x14
+    uint8_t secondary_colour;        // 0x15
+};
+
 /**
  * Track design structure.
  */
+
+/* Track Element entry  size: 0x02 */
+struct TrackDesignTrackElement
+{
+    uint8_t type;  // 0x00
+    uint8_t flags; // 0x01
+};
+
+/* Maze Element entry   size: 0x04 */
+struct TrackDesignMazeElement
+{
+    union
+    {
+        uint32_t all;
+        struct
+        {
+            int8_t x;
+            int8_t y;
+            union
+            {
+                uint16_t maze_entry;
+                struct
+                {
+                    uint8_t direction;
+                    uint8_t type;
+                };
+            };
+        };
+    };
+};
+
 struct TrackDesign
 {
     uint8_t type;
@@ -67,10 +120,10 @@ struct TrackDesign
     uint8_t lift_hill_speed;
     uint8_t num_circuits;
 
-    std::vector<rct_td46_maze_element> maze_elements;
-    std::vector<rct_td46_track_element> track_elements;
-    std::vector<rct_td6_entrance_element> entrance_elements;
-    std::vector<rct_td6_scenery_element> scenery_elements;
+    std::vector<TrackDesignMazeElement> maze_elements;
+    std::vector<TrackDesignTrackElement> track_elements;
+    std::vector<TrackDesignEntranceElement> entrance_elements;
+    std::vector<TrackDesignSceneryElement> scenery_elements;
 
     std::string name;
 
@@ -173,7 +226,7 @@ void track_design_save_select_tile_element(int32_t interactionType, CoordsXY loc
 
 bool track_design_are_entrance_and_exit_placed();
 
-extern std::vector<rct_td6_scenery_element> _trackSavedTileElementsDesc;
+extern std::vector<TrackDesignSceneryElement> _trackSavedTileElementsDesc;
 extern std::vector<const TileElement*> _trackSavedTileElements;
 
 #endif

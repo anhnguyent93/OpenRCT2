@@ -292,7 +292,7 @@ void footpath_get_coordinates_from_pos(
     {
         if (interactionType != VIEWPORT_INTERACTION_ITEM_FOOTPATH)
         {
-            z = tile_element_height(position.x, position.y);
+            z = tile_element_height({ position.x, position.y });
         }
         position = viewport_coord_to_map_coord(start_vp_pos.x, start_vp_pos.y, z);
         position.x = std::clamp(position.x, minPosition.x, maxPosition.x);
@@ -450,6 +450,10 @@ void footpath_interrupt_peeps(int32_t x, int32_t y, int32_t z)
 }
 
 /**
+ * Returns true if the edge of tile x, y specified by direction is occupied by a fence
+ * between heights z0 and z1.
+ *
+ * Note that there may still be a fence on the opposing tile.
  *
  *  rct2: 0x006E59DC
  */
@@ -486,6 +490,8 @@ static TileElement* footpath_connect_corners_get_neighbour(int32_t x, int32_t y,
     }
 
     TileElement* tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return nullptr;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -658,6 +664,8 @@ static TileElement* footpath_get_element(int32_t x, int32_t y, int32_t z0, int32
     int32_t slope;
 
     tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return nullptr;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -688,16 +696,26 @@ static TileElement* footpath_get_element(int32_t x, int32_t y, int32_t z0, int32
     return nullptr;
 }
 
-static bool sub_footpath_disconnect_queue_from_path(
-    int32_t x, int32_t y, TileElement* tileElement, int32_t action, int32_t direction)
+/**
+ * Attempt to connect a newly disconnected queue tile to the specified path tile
+ */
+static bool footpath_reconnect_queue_to_path(int32_t x, int32_t y, TileElement* tileElement, int32_t action, int32_t direction)
 {
     if (((tileElement->AsPath()->GetEdges() & (1 << direction)) == 0) ^ (action < 0))
-        return false;
-    if ((action < 0) && fence_in_the_way(x, y, tileElement->base_height, tileElement->clearance_height, direction))
         return false;
 
     int32_t x1 = x + CoordsDirectionDelta[direction].x;
     int32_t y1 = y + CoordsDirectionDelta[direction].y;
+
+    if (action < 0)
+    {
+        if (fence_in_the_way(x, y, tileElement->base_height, tileElement->clearance_height, direction))
+            return false;
+
+        if (fence_in_the_way(x1, y1, tileElement->base_height, tileElement->clearance_height, direction_reverse(direction)))
+            return false;
+    }
+
     int32_t z = tileElement->base_height;
     TileElement* otherTileElement = footpath_get_element(x1, y1, z - 2, z, direction);
     if (otherTileElement != nullptr && !otherTileElement->AsPath()->IsQueue())
@@ -737,15 +755,15 @@ static bool footpath_disconnect_queue_from_path(int32_t x, int32_t y, TileElemen
     if (action < 0)
     {
         uint8_t direction = tileElement->AsPath()->GetSlopeDirection();
-        if (sub_footpath_disconnect_queue_from_path(x, y, tileElement, action, direction))
+        if (footpath_reconnect_queue_to_path(x, y, tileElement, action, direction))
             return true;
     }
 
-    for (int32_t direction = 0; direction < 4; direction++)
+    for (Direction direction : ALL_DIRECTIONS)
     {
         if ((action < 0) && (direction == tileElement->AsPath()->GetSlopeDirection()))
             continue;
-        if (sub_footpath_disconnect_queue_from_path(x, y, tileElement, action, direction))
+        if (footpath_reconnect_queue_to_path(x, y, tileElement, action, direction))
             return true;
     }
 
@@ -772,6 +790,8 @@ static void loc_6A6D7E(
     else
     {
         TileElement* tileElement = map_get_first_element_at(x >> 5, y >> 5);
+        if (tileElement == nullptr)
+            return;
         do
         {
             switch (tileElement->GetType())
@@ -980,7 +1000,7 @@ void footpath_connect_edges(int32_t x, int32_t y, TileElement* tileElement, int3
     neighbour_list_init(&neighbourList);
 
     footpath_update_queue_entrance_banner(x, y, tileElement);
-    for (int32_t direction = 0; direction < 4; direction++)
+    for (Direction direction : ALL_DIRECTIONS)
     {
         loc_6A6C85(x, y, direction, tileElement, flags, true, &neighbourList);
     }
@@ -1198,7 +1218,7 @@ void footpath_update_queue_chains()
                     if (tileElement->AsEntrance()->GetRideIndex() != rideIndex)
                         continue;
 
-                    uint8_t direction = tileElement->GetDirectionWithOffset(2);
+                    Direction direction = direction_reverse(tileElement->GetDirection());
                     footpath_chain_ride_queue(rideIndex, i, location.x << 5, location.y << 5, tileElement, direction);
                 } while (!(tileElement++)->IsLastForTile());
             }
@@ -1212,7 +1232,7 @@ void footpath_update_queue_chains()
  */
 static void footpath_fix_ownership(int32_t x, int32_t y)
 {
-    const TileElement* surfaceElement = map_get_surface_element_at({ x, y });
+    const auto* surfaceElement = map_get_surface_element_at({ x, y });
     uint16_t ownership;
 
     // Unlikely to be NULL unless deliberate.
@@ -1226,7 +1246,7 @@ static void footpath_fix_ownership(int32_t x, int32_t y)
         // If the tile is safe to own construction rights of, do not erase contruction rights.
         else
         {
-            ownership = surfaceElement->AsSurface()->GetOwnership();
+            ownership = surfaceElement->GetOwnership();
             // You can't own the entrance path.
             if (ownership == OWNERSHIP_OWNED || ownership == OWNERSHIP_AVAILABLE)
             {
@@ -1280,6 +1300,8 @@ static int32_t footpath_is_connected_to_map_edge_recurse(
         return FOOTPATH_SEARCH_SUCCESS;
 
     tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return level == 1 ? FOOTPATH_SEARCH_NOT_FOUND : FOOTPATH_SEARCH_INCOMPLETE;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -1411,15 +1433,15 @@ void PathElement::SetSloped(bool isSloped)
         entryIndex |= FOOTPATH_PROPERTIES_FLAG_IS_SLOPED;
 }
 
-uint8_t PathElement::GetSlopeDirection() const
+Direction PathElement::GetSlopeDirection() const
 {
-    return entryIndex & FOOTPATH_PROPERTIES_SLOPE_DIRECTION_MASK;
+    return static_cast<Direction>(entryIndex & FOOTPATH_PROPERTIES_SLOPE_DIRECTION_MASK);
 }
 
-void PathElement::SetSlopeDirection(uint8_t newSlope)
+void PathElement::SetSlopeDirection(Direction newSlope)
 {
     entryIndex &= ~FOOTPATH_PROPERTIES_SLOPE_DIRECTION_MASK;
-    entryIndex |= newSlope & FOOTPATH_PROPERTIES_SLOPE_DIRECTION_MASK;
+    entryIndex |= static_cast<uint8_t>(newSlope) & FOOTPATH_PROPERTIES_SLOPE_DIRECTION_MASK;
 }
 
 bool PathElement::IsQueue() const
@@ -1605,6 +1627,8 @@ void PathElement::SetShouldDrawPathOverSupports(bool on)
 static void footpath_clear_wide(int32_t x, int32_t y)
 {
     TileElement* tileElement = map_get_first_element_at(x / 32, y / 32);
+    if (tileElement == nullptr)
+        return;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -1622,6 +1646,8 @@ static void footpath_clear_wide(int32_t x, int32_t y)
 static TileElement* footpath_can_be_wide(int32_t x, int32_t y, uint8_t height)
 {
     TileElement* tileElement = map_get_first_element_at(x / 32, y / 32);
+    if (tileElement == nullptr)
+        return nullptr;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -1673,6 +1699,8 @@ void footpath_update_path_wide_flags(int32_t x, int32_t y)
     // y -= 0x20;
 
     TileElement* tileElement = map_get_first_element_at(x / 32, y / 32);
+    if (tileElement == nullptr)
+        return;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -1846,8 +1874,8 @@ void footpath_update_path_wide_flags(int32_t x, int32_t y)
 
 bool footpath_is_blocked_by_vehicle(const TileCoordsXYZ& position)
 {
-    auto pathElement = map_get_path_element_at(position.x, position.y, position.z);
-    return pathElement != nullptr && pathElement->AsPath()->IsBlockedByVehicle();
+    auto pathElement = map_get_path_element_at(position);
+    return pathElement != nullptr && pathElement->IsBlockedByVehicle();
 }
 
 /**
@@ -1877,7 +1905,7 @@ void footpath_update_queue_entrance_banner(int32_t x, int32_t y, TileElement* ti
             if (tileElement->AsEntrance()->GetEntranceType() == ENTRANCE_TYPE_RIDE_ENTRANCE)
             {
                 footpath_queue_chain_push(tileElement->AsEntrance()->GetRideIndex());
-                footpath_chain_ride_queue(255, 0, x, y, tileElement, tileElement->GetDirectionWithOffset(2));
+                footpath_chain_ride_queue(255, 0, x, y, tileElement, direction_reverse(tileElement->GetDirection()));
             }
             break;
     }
@@ -1911,6 +1939,8 @@ static void footpath_remove_edges_towards_here(
     y += CoordsDirectionDelta[direction].y;
 
     tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -1940,6 +1970,8 @@ static void footpath_remove_edges_towards(int32_t x, int32_t y, int32_t z0, int3
     }
 
     TileElement* tileElement = map_get_first_element_at(x >> 5, y >> 5);
+    if (tileElement == nullptr)
+        return;
     do
     {
         if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)
@@ -1977,6 +2009,8 @@ static void footpath_remove_edges_towards(int32_t x, int32_t y, int32_t z0, int3
 bool tile_element_wants_path_connection_towards(TileCoordsXYZD coords, const TileElement* const elementToBeRemoved)
 {
     TileElement* tileElement = map_get_first_element_at(coords.x, coords.y);
+    if (tileElement == nullptr)
+        return false;
     do
     {
         // Don't check the element that gets removed
@@ -2066,6 +2100,8 @@ static void footpath_fix_corners_around(int32_t x, int32_t y, TileElement* pathE
                 continue;
 
             TileElement* tileElement = map_get_first_element_at(x + xOffset, y + yOffset);
+            if (tileElement == nullptr)
+                continue;
             do
             {
                 if (tileElement->GetType() != TILE_ELEMENT_TYPE_PATH)

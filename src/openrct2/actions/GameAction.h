@@ -254,6 +254,20 @@ namespace GameActions
     void Initialize();
     void Register();
     bool IsValidId(uint32_t id);
+
+    // Halts the queue processing until ResumeQueue is called, any calls to ProcessQueue
+    // will have no effect during suspension. It has no effect of actions that will not
+    // cross the network.
+    void SuspendQueue();
+
+    // Resumes queue processing.
+    void ResumeQueue();
+
+    void Enqueue(const GameAction* ga, uint32_t tick);
+    void Enqueue(GameAction::Ptr&& ga, uint32_t tick);
+    void ProcessQueue();
+    void ClearQueue();
+
     GameAction::Ptr Create(uint32_t id);
     GameAction::Ptr Clone(const GameAction* action);
 

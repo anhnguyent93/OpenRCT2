@@ -135,7 +135,8 @@ static void window_maze_construction_construct(int32_t direction);
  */
 rct_window* window_maze_construction_open()
 {
-    rct_window* w = window_create(0, 29, 166, 200, &window_maze_construction_events, WC_RIDE_CONSTRUCTION, WF_NO_AUTO_CLOSE);
+    rct_window* w = window_create(
+        ScreenCoordsXY(0, 29), 166, 200, &window_maze_construction_events, WC_RIDE_CONSTRUCTION, WF_NO_AUTO_CLOSE);
     w->widgets = window_maze_construction_widgets;
     w->enabled_widgets = (1ULL << WIDX_CLOSE) | (1ULL << WIDX_MAZE_BUILD_MODE) | (1ULL << WIDX_MAZE_MOVE_MODE)
         | (1ULL << WIDX_MAZE_FILL_MODE) | (1ULL << WIDX_MAZE_DIRECTION_NW) | (1ULL << WIDX_MAZE_DIRECTION_NE)
@@ -339,11 +340,11 @@ static void window_maze_construction_toolupdate(rct_window* w, rct_widgetindex w
     switch (widgetIndex)
     {
         case WIDX_MAZE_DIRECTION_GROUPBOX:
-            ride_construction_toolupdate_construct(x, y);
+            ride_construction_toolupdate_construct(ScreenCoordsXY(x, y));
             break;
         case WIDX_MAZE_ENTRANCE:
         case WIDX_MAZE_EXIT:
-            ride_construction_toolupdate_entrance_exit(x, y);
+            ride_construction_toolupdate_entrance_exit(ScreenCoordsXY(x, y));
             break;
     }
 }
@@ -377,7 +378,7 @@ static void window_maze_construction_entrance_tooldown(int32_t x, int32_t y, rct
         if (result->Error != GA_ERROR::OK)
             return;
 
-        audio_play_sound_at_location(SoundId::PlaceItem, result->Position.x, result->Position.y, result->Position.z);
+        audio_play_sound_at_location(SoundId::PlaceItem, result->Position);
 
         auto ride = get_ride(rideIndex);
         if (ride != nullptr && ride_are_all_possible_entrances_and_exits_built(ride))
@@ -405,7 +406,7 @@ static void window_maze_construction_tooldown(rct_window* w, rct_widgetindex wid
     switch (widgetIndex)
     {
         case WIDX_MAZE_DIRECTION_GROUPBOX:
-            ride_construction_tooldown_construct(x, y);
+            ride_construction_tooldown_construct(ScreenCoordsXY(x, y));
             break;
         case WIDX_MAZE_ENTRANCE:
         case WIDX_MAZE_EXIT:
@@ -514,6 +515,6 @@ static void window_maze_construction_construct(int32_t direction)
     _currentTrackBegin.y = y;
     if (_rideConstructionState != RIDE_CONSTRUCTION_STATE_MAZE_MOVE)
     {
-        audio_play_sound_at_location(SoundId::PlaceItem, x, y, z);
+        audio_play_sound_at_location(SoundId::PlaceItem, { x, y, z });
     }
 }

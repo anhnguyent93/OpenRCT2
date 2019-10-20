@@ -974,10 +974,10 @@ static void vehicle_update_sound_params(rct_vehicle* vehicle)
 
     if (vehicle->x != LOCATION_NULL)
     {
-        TileElement* tile_element = map_get_surface_element_at({ vehicle->x, vehicle->y });
+        auto surfaceElement = map_get_surface_element_at({ vehicle->x, vehicle->y });
 
         // vehicle underground
-        if (tile_element != nullptr && tile_element->base_height * 8 > vehicle->z)
+        if (surfaceElement != nullptr && surfaceElement->base_height * 8 > vehicle->z)
         {
             soundParam->volume = 0x30;
         }
@@ -1823,13 +1823,15 @@ static void vehicle_update_measurements(rct_vehicle* vehicle)
         return;
     }
 
-    TileElement* tile_element = map_get_surface_element_at({ x, y });
+    auto surfaceElement = map_get_surface_element_at({ x, y });
     // If vehicle above ground.
-    if (tile_element != nullptr && tile_element->base_height * 8 <= z)
+    if (surfaceElement != nullptr && surfaceElement->base_height * 8 <= z)
     {
         // Set tile_element to first element. Since elements aren't always ordered by base height,
         // we must start at the first element and iterate through each tile element.
-        tile_element = map_get_first_element_at(x / 32, y / 32);
+        auto tile_element = map_get_first_element_at(x / 32, y / 32);
+        if (tile_element == nullptr)
+            return;
 
         bool cover_found = false;
         do
@@ -2363,61 +2365,24 @@ static void vehicle_update_waiting_for_passengers(rct_vehicle* vehicle)
                 return;
             }
 
+            // any load: load=4 , full: load=3 , 3/4s: load=2 , half: load=1 , quarter: load=0
             uint8_t load = ride->depart_flags & RIDE_DEPART_WAIT_FOR_LOAD_MASK;
-            if (load == 3)
-            {
-                train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
-                return;
-            }
 
-            uint8_t three_quater_seats = (3 * num_seats_on_train) / 4;
-            if (three_quater_seats != 0 && num_peeps_on_train >= three_quater_seats)
-            {
+            // We want to wait for ceiling((load+1)/4 * num_seats_on_train) peeps, the +3 below is used instead of
+            // ceil() to prevent issues on different cpus/platforms with floats. Note that vanilla RCT1/2 rounded
+            // down here; our change reflects the expected behaviour for waiting for a minimum load target (see #9987)
+            uint8_t peepTarget = ((load + 1) * num_seats_on_train + 3) / 4;
+
+            if (load == 4) // take care of "any load" special case
+                peepTarget = 1;
+
+            if (num_peeps_on_train >= peepTarget)
                 vehicle->update_flags |= VEHICLE_UPDATE_FLAG_TRAIN_READY_DEPART;
-                train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
-                return;
-            }
 
-            if (load == 2)
-            {
-                train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
-                return;
-            }
-
-            if (num_seats_on_train / 2 != 0 && num_peeps_on_train >= num_seats_on_train / 2)
-            {
-                vehicle->update_flags |= VEHICLE_UPDATE_FLAG_TRAIN_READY_DEPART;
-                train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
-                return;
-            }
-
-            if (load == 1)
-            {
-                train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
-                return;
-            }
-
-            if (num_seats_on_train / 4 != 0 && num_peeps_on_train >= num_seats_on_train / 4)
-            {
-                vehicle->update_flags |= VEHICLE_UPDATE_FLAG_TRAIN_READY_DEPART;
-                train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
-                return;
-            }
-
-            if (load == 0)
-            {
-                vehicle->update_flags |= VEHICLE_UPDATE_FLAG_TRAIN_READY_DEPART;
-                train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
-                return;
-            }
-
-            if (num_peeps_on_train != 0)
-            {
-                vehicle->update_flags |= VEHICLE_UPDATE_FLAG_TRAIN_READY_DEPART;
-            }
             train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
             return;
         }
+
         vehicle->update_flags |= VEHICLE_UPDATE_FLAG_TRAIN_READY_DEPART;
         train_ready_to_depart(vehicle, num_peeps_on_train, num_used_seats_on_train);
         return;
@@ -3230,12 +3195,12 @@ static void vehicle_update_departing(rct_vehicle* vehicle)
         {
             auto soundId = (rideEntry->vehicles[0].sound_range == 4) ? SoundId::Tram : SoundId::TrainDeparting;
 
-            audio_play_sound_at_location(soundId, vehicle->x, vehicle->y, vehicle->z);
+            audio_play_sound_at_location(soundId, { vehicle->x, vehicle->y, vehicle->z });
         }
 
         if (ride->mode == RIDE_MODE_UPWARD_LAUNCH || (ride->mode == RIDE_MODE_DOWNWARD_LAUNCH && vehicle->var_CE > 1))
         {
-            audio_play_sound_at_location(SoundId::RideLaunch2, vehicle->x, vehicle->y, vehicle->z);
+            audio_play_sound_at_location(SoundId::RideLaunch2, { vehicle->x, vehicle->y, vehicle->z });
         }
 
         if (!(ride->lifecycle_flags & RIDE_LIFECYCLE_TESTED))
@@ -3442,7 +3407,7 @@ static void vehicle_finish_departing(rct_vehicle* vehicle)
         if (vehicle->var_CE >= 1 && (14 << 16) > vehicle->velocity)
             return;
 
-        audio_play_sound_at_location(SoundId::RideLaunch1, vehicle->x, vehicle->y, vehicle->z);
+        audio_play_sound_at_location(SoundId::RideLaunch1, { vehicle->x, vehicle->y, vehicle->z });
     }
 
     if (ride->mode == RIDE_MODE_UPWARD_LAUNCH)
@@ -3450,7 +3415,7 @@ static void vehicle_finish_departing(rct_vehicle* vehicle)
         if ((ride->launch_speed << 16) > vehicle->velocity)
             return;
 
-        audio_play_sound_at_location(SoundId::RideLaunch1, vehicle->x, vehicle->y, vehicle->z);
+        audio_play_sound_at_location(SoundId::RideLaunch1, { vehicle->x, vehicle->y, vehicle->z });
     }
 
     if (ride->mode != RIDE_MODE_RACE && ride->mode != RIDE_MODE_CONTINUOUS_CIRCUIT_BLOCK_SECTIONED
@@ -3576,7 +3541,7 @@ static void vehicle_update_collision_setup(rct_vehicle* vehicle)
 
         train->sub_state = 2;
 
-        audio_play_sound_at_location(SoundId::Crash, train->x, train->y, train->z);
+        audio_play_sound_at_location(SoundId::Crash, { train->x, train->y, train->z });
 
         sprite_misc_explosion_cloud_create(train->x, train->y, train->z);
 
@@ -3628,7 +3593,7 @@ static void vehicle_update_crash_setup(rct_vehicle* vehicle)
     int32_t num_peeps = vehicle_get_total_num_peeps(vehicle);
     if (num_peeps != 0)
     {
-        audio_play_sound_at_location(SoundId::HauntedHouseScream2, vehicle->x, vehicle->y, vehicle->z);
+        audio_play_sound_at_location(SoundId::HauntedHouseScream2, { vehicle->x, vehicle->y, vehicle->z });
     }
 
     int32_t edx = vehicle->velocity >> 10;
@@ -4043,7 +4008,7 @@ loc_6D8E36:
 
     if ((ride->mode == RIDE_MODE_UPWARD_LAUNCH || ride->mode == RIDE_MODE_DOWNWARD_LAUNCH) && vehicle->var_CE < 2)
     {
-        audio_play_sound_at_location(SoundId::RideLaunch2, vehicle->x, vehicle->y, vehicle->z);
+        audio_play_sound_at_location(SoundId::RideLaunch2, { vehicle->x, vehicle->y, vehicle->z });
         vehicle->velocity = 0;
         vehicle->acceleration = 0;
         vehicle->SetState(VEHICLE_STATUS_DEPARTING, 1);
@@ -4672,6 +4637,8 @@ static void vehicle_update_boat_location(rct_vehicle* vehicle)
 static bool vehicle_boat_is_location_accessible(const TileCoordsXYZ& location)
 {
     TileElement* tileElement = map_get_first_element_at(location.x, location.y);
+    if (tileElement == nullptr)
+        return false;
     do
     {
         if (tileElement->IsGhost())
@@ -5037,24 +5004,24 @@ static void vehicle_update_haunted_house_operating(rct_vehicle* vehicle)
     switch (vehicle->current_time)
     {
         case 45:
-            audio_play_sound_at_location(SoundId::HauntedHouseScare, vehicle->x, vehicle->y, vehicle->z);
+            audio_play_sound_at_location(SoundId::HauntedHouseScare, { vehicle->x, vehicle->y, vehicle->z });
             break;
         case 75:
             vehicle->vehicle_sprite_type = 1;
             vehicle->Invalidate();
             break;
         case 400:
-            audio_play_sound_at_location(SoundId::HauntedHouseScream1, vehicle->x, vehicle->y, vehicle->z);
+            audio_play_sound_at_location(SoundId::HauntedHouseScream1, { vehicle->x, vehicle->y, vehicle->z });
             break;
         case 745:
-            audio_play_sound_at_location(SoundId::HauntedHouseScare, vehicle->x, vehicle->y, vehicle->z);
+            audio_play_sound_at_location(SoundId::HauntedHouseScare, { vehicle->x, vehicle->y, vehicle->z });
             break;
         case 775:
             vehicle->vehicle_sprite_type = 1;
             vehicle->Invalidate();
             break;
         case 1100:
-            audio_play_sound_at_location(SoundId::HauntedHouseScream2, vehicle->x, vehicle->y, vehicle->z);
+            audio_play_sound_at_location(SoundId::HauntedHouseScream2, { vehicle->x, vehicle->y, vehicle->z });
             break;
     }
 }
@@ -5169,18 +5136,18 @@ static TileElement* vehicle_check_collision(int16_t x, int16_t y, int16_t z)
         return nullptr;
     }
 
-    uint8_t bl;
+    uint8_t quadrant;
     if ((x & 0x1F) >= 16)
     {
-        bl = 1;
+        quadrant = 1;
         if ((y & 0x1F) < 16)
-            bl = 2;
+            quadrant = 2;
     }
     else
     {
-        bl = 4;
+        quadrant = 4;
         if ((y & 0x1F) >= 16)
-            bl = 8;
+            quadrant = 8;
     }
 
     do
@@ -5191,7 +5158,7 @@ static TileElement* vehicle_check_collision(int16_t x, int16_t y, int16_t z)
         if (z / 8 >= tileElement->clearance_height)
             continue;
 
-        if (tileElement->flags & bl)
+        if (tileElement->GetOccupiedQuadrants() & quadrant)
             return tileElement;
     } while (!(tileElement++)->IsLastForTile());
 
@@ -5301,7 +5268,7 @@ static void vehicle_crash_on_land(rct_vehicle* vehicle)
     }
 
     vehicle->sub_state = 2;
-    audio_play_sound_at_location(SoundId::Crash, vehicle->x, vehicle->y, vehicle->z);
+    audio_play_sound_at_location(SoundId::Crash, { vehicle->x, vehicle->y, vehicle->z });
 
     sprite_misc_explosion_cloud_create(vehicle->x, vehicle->y, vehicle->z);
     sprite_misc_explosion_flare_create(vehicle->x, vehicle->y, vehicle->z);
@@ -5362,7 +5329,7 @@ static void vehicle_crash_on_water(rct_vehicle* vehicle)
     }
 
     vehicle->sub_state = 2;
-    audio_play_sound_at_location(SoundId::Water1, vehicle->x, vehicle->y, vehicle->z);
+    audio_play_sound_at_location(SoundId::Water1, { vehicle->x, vehicle->y, vehicle->z });
 
     crash_splash_create(vehicle->x, vehicle->y, vehicle->z);
     crash_splash_create(vehicle->x - 8, vehicle->y - 9, vehicle->z);
@@ -5404,9 +5371,9 @@ static void vehicle_update_crash(rct_vehicle* vehicle)
                 curVehicle->crash_z++;
                 if ((scenario_rand() & 0xFFFF) <= 0x1555)
                 {
-                    sprite_misc_explosion_cloud_create(
-                        curVehicle->x + ((scenario_rand() & 2) - 1), curVehicle->y + ((scenario_rand() & 2) - 1),
-                        curVehicle->z);
+                    auto xOffset = (scenario_rand() & 2) - 1;
+                    auto yOffset = (scenario_rand() & 2) - 1;
+                    sprite_misc_explosion_cloud_create(curVehicle->x + xOffset, curVehicle->y + yOffset, curVehicle->z);
                 }
             }
             if (curVehicle->var_C8 + 7281 > 0xFFFF)
@@ -5431,8 +5398,8 @@ static void vehicle_update_crash(rct_vehicle* vehicle)
             continue;
         }
 
-        int16_t z = tile_element_height(curVehicle->x, curVehicle->y);
-        int16_t waterHeight = tile_element_water_height(curVehicle->x, curVehicle->y);
+        int16_t z = tile_element_height({ curVehicle->x, curVehicle->y });
+        int16_t waterHeight = tile_element_water_height({ curVehicle->x, curVehicle->y });
         int16_t zDiff;
         if (waterHeight != 0)
         {
@@ -5717,7 +5684,7 @@ GForces vehicle_get_g_forces(const rct_vehicle* vehicle)
         case TRACK_ELEM_60_DEG_DOWN_COVERED:
         case TRACK_ELEM_BRAKES:
         case TRACK_ELEM_ROTATION_CONTROL_TOGGLE:
-        case TRACK_ELEM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP:
+        case TRACK_ELEM_MAZE:
         case TRACK_ELEM_25_DEG_UP_LEFT_BANKED:
         case TRACK_ELEM_25_DEG_UP_RIGHT_BANKED:
         case TRACK_ELEM_WATERFALL:
@@ -6149,7 +6116,7 @@ GForces vehicle_get_g_forces(const rct_vehicle* vehicle)
             break;
         case TRACK_ELEM_90_DEG_TO_INVERTED_FLAT_QUARTER_LOOP_UP:
         case TRACK_ELEM_MULTIDIM_90_DEG_UP_TO_INVERTED_FLAT_QUARTER_LOOP:
-        case 255:
+        case TRACK_ELEM_MULTIDIM_INVERTED_90_DEG_UP_TO_FLAT_QUARTER_LOOP:
             vertFactor = (((uint16_t)(-(vehicle->track_progress - 137))) / 4) + 55;
             // 6D7614
             break;
@@ -6769,7 +6736,8 @@ static void vehicle_update_block_brakes_open_previous_section(rct_vehicle* vehic
             slowY = slowTrackBeginEnd.end_y;
             slowTileElement = *(slowTrackBeginEnd.begin_element);
             if (slowX == x && slowY == y && slowTileElement.base_height == tileElement->base_height
-                && slowTileElement.type == tileElement->type)
+                && slowTileElement.GetType() == tileElement->GetType()
+                && slowTileElement.GetDirection() == tileElement->GetDirection())
             {
                 return;
             }
@@ -6794,7 +6762,7 @@ static void vehicle_update_block_brakes_open_previous_section(rct_vehicle* vehic
         auto ride = get_ride(vehicle->ride);
         if (ride != nullptr && ride->IsBlockSectioned())
         {
-            audio_play_sound_at_location(SoundId::BlockBrakeClose, x, y, z);
+            audio_play_sound_at_location(SoundId::BlockBrakeClose, { x, y, z });
         }
     }
 }
@@ -7229,8 +7197,8 @@ static void vehicle_update_spinning_car(rct_vehicle* vehicle)
  */
 static void steam_particle_create(int16_t x, int16_t y, int16_t z)
 {
-    TileElement* tileElement = map_get_surface_element_at({ x, y });
-    if (tileElement != nullptr && z > tileElement->base_height * 8)
+    auto surfaceElement = map_get_surface_element_at({ x, y });
+    if (surfaceElement != nullptr && z > surfaceElement->base_height * 8)
     {
         rct_steam_particle* steam = &create_sprite(SPRITE_IDENTIFIER_MISC)->steam_particle;
         if (steam == nullptr)
@@ -7412,7 +7380,7 @@ static void vehicle_play_scenery_door_open_sound(rct_vehicle* vehicle, WallEleme
         auto soundId = DoorOpenSoundIds[doorSoundType - 1];
         if (soundId != SoundId::Null)
         {
-            audio_play_sound_at_location(soundId, vehicle->x, vehicle->track_y, vehicle->track_z);
+            audio_play_sound_at_location(soundId, { vehicle->track_x, vehicle->track_y, vehicle->track_z });
         }
     }
 }
@@ -7430,7 +7398,7 @@ static void vehicle_play_scenery_door_close_sound(rct_vehicle* vehicle, WallElem
         auto soundId = DoorCloseSoundIds[doorSoundType - 1];
         if (soundId != SoundId::Null)
         {
-            audio_play_sound_at_location(soundId, vehicle->x, vehicle->track_y, vehicle->track_z);
+            audio_play_sound_at_location(soundId, { vehicle->track_x, vehicle->track_y, vehicle->track_z });
         }
     }
 }
@@ -7459,14 +7427,15 @@ static void vehicle_update_scenery_door(rct_vehicle* vehicle)
         return;
     }
 
-    if (vehicle->next_vehicle_on_train != SPRITE_INDEX_NULL)
+    if ((vehicle->next_vehicle_on_train != SPRITE_INDEX_NULL) && (tileElement->GetAnimationFrame() == 0))
     {
         tileElement->SetAnimationIsBackwards(false);
         tileElement->SetAnimationFrame(1);
         map_animation_create(MAP_ANIMATION_TYPE_WALL_DOOR, x, y, z);
         vehicle_play_scenery_door_open_sound(vehicle, tileElement);
     }
-    else
+
+    if (vehicle->next_vehicle_on_train == SPRITE_INDEX_NULL)
     {
         tileElement->SetAnimationIsBackwards(false);
         tileElement->SetAnimationFrame(6);
@@ -7539,14 +7508,15 @@ static void vehicle_update_handle_scenery_door(rct_vehicle* vehicle)
         return;
     }
 
-    if (vehicle->next_vehicle_on_train != SPRITE_INDEX_NULL)
+    if ((vehicle->next_vehicle_on_train != SPRITE_INDEX_NULL) && (tileElement->GetAnimationFrame() == 0))
     {
         tileElement->SetAnimationIsBackwards(true);
         tileElement->SetAnimationFrame(1);
         map_animation_create(MAP_ANIMATION_TYPE_WALL_DOOR, x, y, z);
         vehicle_play_scenery_door_open_sound(vehicle, tileElement);
     }
-    else
+
+    if (vehicle->next_vehicle_on_train == SPRITE_INDEX_NULL)
     {
         tileElement->SetAnimationIsBackwards(true);
         tileElement->SetAnimationFrame(6);
@@ -7561,7 +7531,7 @@ static void vehicle_update_play_water_splash_sound()
         return;
     }
 
-    audio_play_sound_at_location(SoundId::WaterSplash, unk_F64E20.x, unk_F64E20.y, unk_F64E20.z);
+    audio_play_sound_at_location(SoundId::WaterSplash, { unk_F64E20.x, unk_F64E20.y, unk_F64E20.z });
 }
 
 /**
@@ -7977,7 +7947,7 @@ static bool vehicle_update_track_motion_forwards_get_new_track(
                 if (!(rideEntry->vehicles[0].flags & VEHICLE_ENTRY_FLAG_POWERED))
                 {
                     audio_play_sound_at_location(
-                        SoundId::BlockBrakeRelease, vehicle->track_x, vehicle->track_y, vehicle->track_z);
+                        SoundId::BlockBrakeRelease, { vehicle->track_x, vehicle->track_y, vehicle->track_z });
                 }
             }
             map_invalidate_element(vehicle->track_x, vehicle->track_z, tileElement);
@@ -8188,7 +8158,7 @@ loc_6DAEB9:
                 if (_vehicleF64E2C == 0)
                 {
                     _vehicleF64E2C++;
-                    audio_play_sound_at_location(SoundId::BrakeRelease, vehicle->x, vehicle->y, vehicle->z);
+                    audio_play_sound_at_location(SoundId::BrakeRelease, { vehicle->x, vehicle->y, vehicle->z });
                 }
             }
         }
@@ -9917,20 +9887,19 @@ void vehicle_update_crossings(const rct_vehicle* vehicle)
 
         while (true)
         {
-            TileElement* tileElement = map_get_path_element_at(
-                xyElement.x / 32, xyElement.y / 32, xyElement.element->base_height);
+            auto* pathElement = map_get_path_element_at({ xyElement.x / 32, xyElement.y / 32, xyElement.element->base_height });
             auto ride = get_ride(vehicle->ride);
 
             // Many New Element parks have invisible rides hacked into the path.
             // Limit path blocking to Miniature Railway to prevent peeps getting stuck everywhere.
-            if (tileElement && ride != nullptr && ride->type == RIDE_TYPE_MINIATURE_RAILWAY)
+            if (pathElement && ride != nullptr && ride->type == RIDE_TYPE_MINIATURE_RAILWAY)
             {
-                if (!playedClaxon && !tileElement->AsPath()->IsBlockedByVehicle())
+                if (!playedClaxon && !pathElement->IsBlockedByVehicle())
                 {
                     vehicle_claxon(vehicle);
                 }
                 crossingBonus = 4;
-                tileElement->AsPath()->SetIsBlockedByVehicle(true);
+                pathElement->SetIsBlockedByVehicle(true);
             }
             else
             {
@@ -9993,11 +9962,10 @@ void vehicle_update_crossings(const rct_vehicle* vehicle)
                 }
             }
 
-            TileElement* tileElement = map_get_path_element_at(
-                xyElement.x / 32, xyElement.y / 32, xyElement.element->base_height);
-            if (tileElement)
+            auto* pathElement = map_get_path_element_at({ xyElement.x / 32, xyElement.y / 32, xyElement.element->base_height });
+            if (pathElement)
             {
-                tileElement->AsPath()->SetIsBlockedByVehicle(false);
+                pathElement->SetIsBlockedByVehicle(false);
             }
         }
     }
@@ -10009,10 +9977,10 @@ void vehicle_claxon(const rct_vehicle* vehicle)
     switch (rideEntry->vehicles[vehicle->vehicle_type].sound_range)
     {
         case SOUND_RANGE_WHISTLE:
-            audio_play_sound_at_location(SoundId::TrainWhistle, vehicle->x, vehicle->y, vehicle->z);
+            audio_play_sound_at_location(SoundId::TrainWhistle, { vehicle->x, vehicle->y, vehicle->z });
             break;
         case SOUND_RANGE_BELL:
-            audio_play_sound_at_location(SoundId::Tram, vehicle->x, vehicle->y, vehicle->z);
+            audio_play_sound_at_location(SoundId::Tram, { vehicle->x, vehicle->y, vehicle->z });
             break;
     }
 }
